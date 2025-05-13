@@ -62,11 +62,20 @@ def fetch_new_commands(state):
     if state["last_msg_id"]:
         params["after"] = state["last_msg_id"]
 
-    url = f"{API_BASE}/channels/{CHANNEL_ID}/messages"
-    msgs = requests.get(url, headers=HEADERS, params=params, timeout=15).json()
+    url  = f"{API_BASE}/channels/{CHANNEL_ID}/messages"
+    resp = requests.get(url, headers=HEADERS, params=params, timeout=15)
+
+    if resp.status_code != 200:
+        post(f"⚠️ Discord API error {resp.status_code}: {resp.text[:120]}")
+        return []                        # don't crash the bot
+
+    data = resp.json()
+    if not isinstance(data, list):      # e.g. {'message':'401:…'}
+        post(f"⚠️ Unexpected Discord payload: {data}")
+        return []
 
     cmds, newest = [], state["last_msg_id"]
-    for m in reversed(msgs):          # process oldest‑first
+    for m in reversed(data):
         newest = m["id"]
         txt = m["content"].strip().lower()
         if txt in ("!buy", "!sell"):
@@ -75,7 +84,7 @@ def fetch_new_commands(state):
     return cmds
 
 def process_commands(cmds, price, users):
-    """Mutate players’ cash / btc based on commands."""
+    """Mutate players' cash / btc based on commands."""
     for uid, name, action in cmds:
         pl = users.setdefault(uid, {"name": name, "cash": START_CASH, "btc": 0.0})
         if action == "buy" and pl["cash"] > 0:
@@ -94,7 +103,7 @@ def leaderboard(users, price, top=5):
     if not ranking:
         return "No players yet."
     lines = [
-        f"**{i+1}. {u['name']}**  ${u['cash'] + u['btc'] * price:,.0f}"
+        f"**{i+1}. {u['name']}**   ${u['cash'] + u['btc'] * price:,.0f}"
         for i, u in enumerate(ranking)
     ]
     return "\n".join(lines)
@@ -115,9 +124,9 @@ def make_daily_digest(series, today, sma30, state):
         f"📊 **BTC Daily Digest — {date.today()}**\n"
         f"Price: **${today:,.0f}** ({pct(today, yday):+.2f}% 24h, "
         f"{pct(today, week):+.2f}% 7d) {trend}\n"
-        f"SMA30: ${sma30:,.0f}  (gap {gap:+.1f} %)\n"
-        f"30‑day σ: ${vol30:,.0f}\n"
-        f"90‑day range: ${lo90:,.0f} → ${hi90:,.0f}\n"
+        f"SMA30: ${sma30:,.0f}  (gap {gap:+.1f} %)\n"
+        f"30-day σ: ${vol30:,.0f}\n"
+        f"90-day range: ${lo90:,.0f} → ${hi90:,.0f}\n"
         f"Mode: {'🚀 long' if state['mode']=='long' else '💤 flat'}\n\n"
         f"🏆 **Leaderboard**\n{lb_text}"
     )
@@ -137,15 +146,17 @@ def main():
     cmds = fetch_new_commands(st)
     if cmds:
         process_commands(cmds, today, st["users"])
+        print("DEBUG cmds found:", cmds)
+        print("Players:", st["users"])
 
     # 2) trading signals
     if st["mode"] == "flat" and today <= BUY_DISCOUNT * sma30:
-        post(f"🟢 **BUY signal** — price ${today:,.0f} (≤ {int((1-BUY_DISCOUNT)*100)} % below SMA30)")
+        post(f"🟢 **BUY signal** — price ${today:,.0f} (≤ {int((1-BUY_DISCOUNT)*100)} % below SMA30)")
         st["mode"], st["last_buy"] = "long", today
 
     elif st["mode"] == "long" and today >= SELL_PREMIUM * st["last_buy"]:
         gain = pct(today, st["last_buy"])
-        post(f"🔴 **SELL signal** — price ${today:,.0f}  (gain {gain:.1f} %)")
+        post(f"🔴 **SELL signal** — price ${today:,.0f}  (gain {gain:.1f} %)")
         st["mode"], st["last_buy"] = "flat", None
 
     # 3) daily digest once per UTC day
@@ -160,5 +171,5 @@ if __name__ == "__main__":
     try:
         main()
     except Exception as e:
-        post(f"⚠️ Dink‑Bot error: `{e}`")
+        post(f"⚠️ Dink-Bot error: `{e}`")
         raise
