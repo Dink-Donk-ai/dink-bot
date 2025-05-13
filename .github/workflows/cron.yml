@@ -1,7 +1,7 @@
 name: dink-bot          # you can call it whatever you like
 on:
   schedule:
-    - cron:  '0 8 * * *'      # daily 08:00 UTC
+    - cron:  '*/30 * * * *'      # daily 08:00 UTC
   workflow_dispatch:          # adds the “Run workflow” button
 
 jobs:
