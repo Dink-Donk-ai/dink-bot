@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-Very small BTC “dip / rip” notifier.
+Very small BTC "dip / rip" notifier.
 
 Logic (tweak at will):
-• BUY signal  – today’s close ≤ 15 % below the 30‑day SMA
-• SELL signal – today’s close ≥ 20 % above your last BUY price
+• BUY signal  – today's close ≤ 15 % below the 30-day SMA
+• SELL signal – today's close ≥ 20 % above your last BUY price
 State is kept in state.json in the repo.
 """
 import json, os, sys, time
@@ -40,14 +40,19 @@ def main():
     sma30 = sma(series, 30)
     st = load_state()
 
-    now = datetime.now(timezone.utc).strftime("%Y‑%m‑%d")
+    now = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     if st["mode"] == "flat" and today <= 0.85 * sma30:       # BUY
-        post_discord(f"🟢 **BUY signal** {now}: price ${today:,.0f} (≥15 % below 30‑day SMA ${sma30:,.0f})")
+        post_discord(f"🟢 **BUY signal** {now}: price ${today:,.0f} (≥15 % below 30-day SMA ${sma30:,.0f})")
         st = {"mode": "long", "last_buy": today}
     elif st["mode"] == "long" and today >= 1.20 * st["last_buy"]:  # SELL
         gain = (today / st["last_buy"] - 1) * 100
         post_discord(f"🔴 **SELL signal** {now}: price ${today:,.0f} (≈{gain:.1f}% over buy price)")
         st = {"mode": "flat", "last_buy": None}
+
+    # --- DEBUG HEARTBEAT ---
+    post_discord(f"👋 Daily heartbeat {now}: price ${today:,.0f}")
+    print(f"Heartbeat sent - today ${today:,.0f}")
+    # -----------------------
 
     save_state(st)
 
