@@ -26,7 +26,7 @@ COINGECKO_URL = (
     "?vs_currency=usd&days=90&interval=daily"
 )
 
-CMD_RE = re.compile(r"^(buy|sell|balance)(?:\s+([\d.]+|all))?$", re.I)
+CMD_RE = re.compile(r"^(buy|sell|balance|stats)(?:\s+([\d.]+|all))?$", re.I)
 SATOSHI = 100_000_000
 # ------------------------------------------------------------------
 
@@ -90,6 +90,19 @@ async def reply_and_delete(ch: discord.TextChannel, msg: discord.Message, text: 
     except discord.Forbidden:
         pass
 # ------------------------------------------------------------------
+def make_digest_snippet(price: float, sma: float, series: list[float], price_c: int) -> str:
+    yday, week = series[-2], series[-8]
+    gap = pct(price, sma)
+    trend = "📈" if gap > 0 else "📉"
+    vol30 = statistics.pstdev(series[-30:])
+    ranks = sorted(STATE["users"].values(),
+                   key=lambda u: u["cash_c"] + u["btc_s"]*price_c//SATOSHI,
+                   reverse=True)[:3]
+    lbtxt = ", ".join(f"{u['name']} {fmt_usd(u['cash_c']+u['btc_s']*price_c//SATOSHI)}"
+                      for u in ranks) or "no players yet"
+    return (f"📊 **Now** — BTC ${price:,.0f} "
+            f"({pct(price,yday):+.2f}% 24h, {pct(price,week):+.2f}% 7d, gap {gap:+.1f}% vs SMA30{trend})\n"
+            f"σ₍30d₎ ≈ ${vol30:,.0f} | top3: {lbtxt}")
 
 async def handle_command(cmd: str, arg: str | None, author: discord.Member,
                          price: float, price_cents: int, sma: float,
@@ -186,8 +199,13 @@ async def on_message(message: discord.Message):
     sma      = sum(prices[-30:]) / 30
     channel  = message.channel
 
-    changed = await handle_command(cmd, arg, message.author,
-                                   price, price_c, sma, channel)
+    if cmd == "stats":
+        await channel.send(make_digest_snippet(price, sma, prices, price_c))
+        changed = False
+    else:
+        changed = await handle_command(cmd, arg, message.author,
+                                       price, price_c, sma, channel)
+
     try:
         await message.delete()
     except discord.Forbidden:
