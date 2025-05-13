@@ -198,13 +198,14 @@ async def handle_command(cmd: str, arg: str | None, author: discord.Member,
                       f"{fmt_stats(price, sma)}")
 
     # ------- BALANCE ----------------------------------------------
-    elif cmd == "balance":
-    net_c = u["cash_c"] + u["btc_s"] * price_cents // SATOSHI
-    await ch.send(
-        f"📄 **{name}** balance: {fmt_usd(u['cash_c'])} cash, "
-        f"{fmt_btc(u['btc_s'])} (net {fmt_usd(net_c)})"
-        f"{fmt_stats(price, sma)}"
-    )
+        elif cmd == "balance":
+        net_c = (u["cash_c"]
+                 + u["btc_s"] * price_cents // SATOSHI)
+        await ch.send(
+            f"📄 **{name}** balance: {fmt_usd(u['cash_c'])} cash, "
+            f"{fmt_btc(u['btc_s'])} (net {fmt_usd(net_c)})"
+            f"{fmt_stats(price, sma)}"
+        )
 
     return changed
 
