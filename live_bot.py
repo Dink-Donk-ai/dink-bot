@@ -9,6 +9,35 @@ Dink‑Bot LIVE  –  integer‑precise play‑money BTC trader
 import discord, aiohttp, asyncio, json, os, re, statistics
 from datetime import datetime, timezone, date
 from typing import Dict, Any
+from discord import Embed, Colour
+
+def make_stats_embed(price: float, sma: float, series: list[float],
+                     price_c: int) -> Embed:
+    yday, week = series[-2], series[-8]
+    gap  = pct(price, sma)
+    vol30 = statistics.pstdev(series[-30:])
+    trend_up = gap >= 0
+
+    colour = Colour.green() if trend_up else Colour.red()
+    emb = Embed(title="📊 BTC Snapshot", colour=colour,
+                description=f"**Price:** ${price:,.0f}")
+
+    emb.add_field(name="24 h", value=f"{pct(price,yday):+.2f}%")
+    emb.add_field(name="7 d",  value=f"{pct(price,week):+.2f}%")
+    emb.add_field(name="Gap vs SMA30", value=f"{gap:+.1f}%")
+    emb.add_field(name="σ (30 d)", value=f"${vol30:,.0f}", inline=False)
+
+    # leaderboard field (optional)
+    ranks = sorted(STATE["users"].values(),
+                   key=lambda u: u["cash_c"] + u["btc_s"]*price_c//SATOSHI,
+                   reverse=True)[:3]
+    lb = "\n".join(f"{i+1}. {u['name']} — "
+                   f"{fmt_usd(u['cash_c']+u['btc_s']*price_c//SATOSHI)}"
+                   for i,u in enumerate(ranks)) or "No players yet."
+    emb.add_field(name="Top 3 players", value=lb, inline=False)
+
+    emb.set_footer(text=datetime.utcnow().strftime("%Y‑%m‑%d %H:%M UTC"))
+    return emb
 
 # ---------- CONFIG -------------------------------------------------
 START_CASH_CENTS = 100_000            # $1 000
@@ -200,11 +229,9 @@ async def on_message(message: discord.Message):
     channel  = message.channel
 
     if cmd == "stats":
-        await channel.send(make_digest_snippet(price, sma, prices, price_c))
+        embed = make_stats_embed(price, sma, prices, price_c)
+        await channel.send(embed=embed)
         changed = False
-    else:
-        changed = await handle_command(cmd, arg, message.author,
-                                       price, price_c, sma, channel)
 
     try:
         await message.delete()
