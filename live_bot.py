@@ -55,7 +55,7 @@ COINGECKO_URL = (
     "?vs_currency=usd&days=90&interval=daily"
 )
 
-CMD_RE = re.compile(r"^(buy|sell|balance|stats)(?:\s+([\d.]+|all))?$", re.I)
+CMD_RE = re.compile(r"^(buy|sell|balance|stats|help)(?:\s+([\d.]+|all))?$", re.I)
 SATOSHI = 100_000_000
 # ------------------------------------------------------------------
 
@@ -235,6 +235,18 @@ async def on_message(message: discord.Message):
     if cmd == "stats":
         embed = make_stats_embed(price, sma, prices, price_c)
         await channel.send(embed=embed)
+
+    elif cmd == "help":
+        help_msg = (
+            "**Available commands**\n"
+            "• `!buy <amount|all>` – buy BTC with the USD amount or all your cash\n"
+            "• `!sell <amount|all>` – sell that many BTC, or that many USD worth, or *all*\n"
+            "• `!balance` – show your portfolio balance\n"
+            "• `!stats` – current market snapshot (embed)\n"
+            "• `!help` – this message"
+        )
+        await channel.send(help_msg)
+
     else:
         changed = await handle_command(cmd, arg, message.author,
                                        price, price_c, sma, channel)
