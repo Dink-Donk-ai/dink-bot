@@ -230,11 +230,14 @@ async def on_message(message: discord.Message):
     price_c  = price_to_cents(price)
     sma      = sum(prices[-30:]) / 30
     channel  = message.channel
+    changed = False
 
     if cmd == "stats":
         embed = make_stats_embed(price, sma, prices, price_c)
         await channel.send(embed=embed)
-        changed = False
+    else:
+        changed = await handle_command(cmd, arg, message.author,
+                                       price, price_c, sma, channel)
 
     try:
         await message.delete()
