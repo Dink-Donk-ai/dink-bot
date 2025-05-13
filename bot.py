@@ -87,12 +87,22 @@ def process_commands(cmds, price, users):
     """Mutate players' cash / btc based on commands."""
     for uid, name, action in cmds:
         pl = users.setdefault(uid, {"name": name, "cash": START_CASH, "btc": 0.0})
-        if action == "buy" and pl["cash"] > 0:
-            pl["btc"] += pl["cash"] / price
-            pl["cash"] = 0.0
-        elif action == "sell" and pl["btc"] > 0:
-            pl["cash"] += pl["btc"] * price
-            pl["btc"] = 0.0
+
+        if action == "buy":
+            if pl["cash"] > 0:
+                btc = pl["cash"] / price
+                pl["btc"], pl["cash"] = pl["btc"] + btc, 0.0
+                post(f"🆕 **{name}** bought {btc:.6f} BTC at ${price:,.0f}")
+            else:
+                post(f"⚠️ **{name}** tried to *buy* but has no cash left!")
+
+        elif action == "sell":
+            if pl["btc"] > 0:
+                cash = pl["btc"] * price
+                pl["cash"], pl["btc"] = pl["cash"] + cash, 0.0
+                post(f"💰 **{name}** sold all BTC for ${cash:,.0f}")
+            else:
+                post(f"⚠️ **{name}** tried to *sell* but holds no BTC!")
 
 def leaderboard(users, price, top=5):
     ranking = sorted(
