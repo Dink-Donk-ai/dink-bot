@@ -1,14 +1,14 @@
-name: dink-bot          # you can call it whatever you like
-on:
-  schedule:
-    - cron:  '*/30 * * * *'      # daily 08:00 UTC
-  workflow_dispatch:          # adds the "Run workflow" button
+# name: dink-bot          
+#on:
+#  schedule:
+#    - cron:  '*/30 * * * *'      
+#  workflow_dispatch:          
 
-jobs:
-  run:
-    runs-on: ubuntu-latest
+#jobs:
+#  run:
+#    runs-on: ubuntu-latest
 
-    steps:
+#    steps:
       - uses: actions/checkout@v4
 
       - name: Set up Python
