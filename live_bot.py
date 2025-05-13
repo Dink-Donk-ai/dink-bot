@@ -83,6 +83,8 @@ async def process_cmd(cmd, arg, author, price, sma):
 @bot.event
 async def on_ready():
     print(f"Logged in as {bot.user}")
+    # kick off the background digest/alert loop
+    asyncio.create_task(background_tasks())
 
 @bot.event
 async def on_message(msg):
@@ -130,5 +132,4 @@ async def background_tasks():
             save_state(STATE)
         await asyncio.sleep(60)          # loop every minute
 
-bot.loop.create_task(background_tasks())
 bot.run(TOKEN)
