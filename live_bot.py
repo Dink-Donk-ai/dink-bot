@@ -198,7 +198,7 @@ async def handle_command(cmd: str, arg: str | None, author: discord.Member,
                       f"{fmt_stats(price, sma)}")
 
     # ------- BALANCE ----------------------------------------------
-        elif cmd == "balance":
+    elif cmd == "balance":
         net_c = (u["cash_c"]
                  + u["btc_s"] * price_cents // SATOSHI)
         await ch.send(
