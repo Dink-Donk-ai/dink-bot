@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
 """
-Dink‑Bot v2  –  BTC watcher + play‑money game
-Adds `!balance`, deletes processed commands, and
-appends live BTC stats to every user reply.
+Dink‑Bot v3  –  adds partial !buy <usd> and !sell <btc>
 """
 
-import json, os, statistics, requests
+import json, os, statistics, requests, re
 from datetime import datetime, timezone, date
 
 # ---------- CONFIG -------------------------------------------------
 START_CASH   = 1_000
-BUY_DISCOUNT = 0.90            # buy when price ≤ 90 % of SMA30
-SELL_PREMIUM = 1.15            # sell when price ≥ 115 % of entry
-DIGEST_HOUR  = 8               # UTC
+BUY_DISCOUNT = 0.90
+SELL_PREMIUM = 1.15
+DIGEST_HOUR  = 8
 STATE_FILE   = "state.json"
 
 COINGECKO_URL = (
@@ -20,8 +18,8 @@ COINGECKO_URL = (
     "?vs_currency=usd&days=90&interval=daily"
 )
 
-WEBHOOK_URL  = os.environ["DISCORD_WEBHOOK_URL"]      # incoming
-BOT_TOKEN    = os.environ["DISCORD_BOT_TOKEN"]        # read / delete
+WEBHOOK_URL  = os.environ["DISCORD_WEBHOOK_URL"]
+BOT_TOKEN    = os.environ["DISCORD_BOT_TOKEN"]
 CHANNEL_ID   = os.environ["DISCORD_CHANNEL_ID"]
 HEADERS      = {"Authorization": f"Bot {BOT_TOKEN}"}
 API_BASE     = "https://discord.com/api/v10"
@@ -44,21 +42,30 @@ def save_state(s): json.dump(s, open(STATE_FILE,"w"), indent=2)
 def post(msg): requests.post(WEBHOOK_URL, json={"content":msg}, timeout=10)
 
 def delete(msg_id):
-    url = f"{API_BASE}/channels/{CHANNEL_ID}/messages/{msg_id}"
-    requests.delete(url, headers=HEADERS, timeout=10)
+    requests.delete(f"{API_BASE}/channels/{CHANNEL_ID}/messages/{msg_id}",
+                    headers=HEADERS, timeout=10)
+
+def format_price_stats(price, sma30):
+    gap = pct(price, sma30)
+    emoji = "📈" if gap > 0 else "📉"
+    return f" | BTC ${price:,.0f} ({gap:+.1f}% vs SMA30){emoji}"
 # ------------------------------------------------------------------
 
-# ---------- Discord command polling --------------------------------
+# ---------- Discord polling ---------------------------------------
+CMD_RE = re.compile(r"^!(buy|sell|balance)(?:\s+([\d.]+|all))?$", re.I)
+
 def fetch_new_commands(state):
+    """return [(msg_id, uid, name, cmd, arg)]"""
     params = {"limit": 100}
     if state["last_msg_id"]:
         params["after"] = state["last_msg_id"]
-    resp = requests.get(f"{API_BASE}/channels/{CHANNEL_ID}/messages",
-                        headers=HEADERS, params=params, timeout=15)
-    if resp.status_code != 200:
-        post(f"⚠️ Discord API error {resp.status_code}: {resp.text[:100]}")
+
+    r = requests.get(f"{API_BASE}/channels/{CHANNEL_ID}/messages",
+                     headers=HEADERS, params=params, timeout=15)
+    if r.status_code != 200:
+        post(f"⚠️ Discord API error {r.status_code}: {r.text[:120]}")
         return []
-    data = resp.json()
+    data = r.json()
     if not isinstance(data, list):
         post(f"⚠️ Unexpected Discord payload: {data}")
         return []
@@ -66,67 +73,80 @@ def fetch_new_commands(state):
     cmds, newest = [], state["last_msg_id"]
     for m in reversed(data):
         newest = m["id"]
-        txt = m["content"].strip().lower()
-        if txt in ("!buy", "!sell", "!balance"):
-            cmds.append((m["id"], m["author"]["id"], m["author"]["username"], txt[1:]))
+        mtext = m["content"].strip()
+        mres  = CMD_RE.match(mtext)
+        if mres:
+            cmd, arg = mres.group(1).lower(), mres.group(2)
+            cmds.append((m["id"], m["author"]["id"], m["author"]["username"], cmd, arg))
     state["last_msg_id"] = newest
     return cmds
 # ------------------------------------------------------------------
 
-def format_price_stats(price, sma30):
-    gap = pct(price, sma30)
-    emoji = "📈" if gap > 0 else "📉"
-    return f" | BTC ${price:,.0f} ({gap:+.1f}% vs SMA30){emoji}"
-
 def process_commands(cmds, price, sma30, users):
     changed = False
-    for msg_id, uid, name, action in cmds:
-        user = users.setdefault(uid, {"name": name, "cash": START_CASH, "btc": 0.0})
+    for msg_id, uid, name, action, arg in cmds:
+        pl = users.setdefault(uid, {"name": name, "cash": START_CASH, "btc": 0.0})
         reply = ""
 
         if action == "buy":
-            if user["cash"] > 0:
-                btc = user["cash"] / price
-                user["btc"], user["cash"] = user["btc"] + btc, 0.0
-                changed = True
-                reply = (f"🆕 **{name}** bought {btc:.6f} BTC with their bankroll"
-                         f"{format_price_stats(price, sma30)}")
+            # determine USD amount to spend
+            spend_all = arg is None or arg.lower() == "all"
+            if spend_all:
+                usd = pl["cash"]
             else:
-                reply = f"⚠️ **{name}** you have no cash left!{format_price_stats(price, sma30)}"
+                try:
+                    usd = float(arg)
+                except ValueError:
+                    usd = -1
+            if usd <= 0 or usd > pl["cash"]:
+                reply = f"⚠️ **{name}** invalid buy amount!{format_price_stats(price, sma30)}"
+            else:
+                btc = usd / price
+                pl["btc"] += btc
+                pl["cash"] -= usd
+                changed = True
+                reply = (f"🆕 **{name}** bought {btc:.6f} BTC for ${usd:,.0f}"
+                         f"{format_price_stats(price, sma30)}")
 
         elif action == "sell":
-            if user["btc"] > 0:
-                cash_out = user["btc"] * price
-                user["cash"], user["btc"] = user["cash"] + cash_out, 0.0
-                changed = True
-                reply = (f"💰 **{name}** sold all BTC for ${cash_out:,.0f}"
-                         f"{format_price_stats(price, sma30)}")
+            sell_all = arg is None or arg.lower() == "all"
+            if sell_all:
+                btc_amt = pl["btc"]
             else:
-                reply = f"⚠️ **{name}** you hold no BTC!{format_price_stats(price, sma30)}"
+                try:
+                    btc_amt = float(arg)
+                except ValueError:
+                    btc_amt = -1
+            if btc_amt <= 0 or btc_amt > pl["btc"]:
+                reply = f"⚠️ **{name}** invalid sell amount!{format_price_stats(price, sma30)}"
+            else:
+                usd_out = btc_amt * price
+                pl["btc"] -= btc_amt
+                pl["cash"] += usd_out
+                changed = True
+                reply = (f"💰 **{name}** sold {btc_amt:.6f} BTC for ${usd_out:,.0f}"
+                         f"{format_price_stats(price, sma30)}")
 
         elif action == "balance":
-            net = user["cash"] + user["btc"] * price
-            reply = (f"📄 **{name}** balance: "
-                     f"${user['cash']:,.0f} cash, {user['btc']:.6f} BTC "
-                     f"(net ${net:,.0f}){format_price_stats(price, sma30)}")
+            net = pl["cash"] + pl["btc"] * price
+            reply = (f"📄 **{name}** balance: ${pl['cash']:,.0f} cash, "
+                     f"{pl['btc']:.6f} BTC (net ${net:,.0f})"
+                     f"{format_price_stats(price, sma30)}")
 
         if reply:
             post(reply)
-        delete(msg_id)          # keep the channel clean
+        delete(msg_id)
 
     return changed
 # ------------------------------------------------------------------
 
 def leaderboard(users, price, top=5):
-    ranks = sorted(users.values(),
-                   key=lambda u: u["cash"] + u["btc"]*price,
-                   reverse=True)[:top]
-    if not ranks:
-        return "No players yet."
-    return "\n".join(
-        f"**{i+1}. {u['name']}**  ${u['cash']+u['btc']*price:,.0f}"
-        for i, u in enumerate(ranks)
-    )
+    rank = sorted(users.values(),
+                  key=lambda u: u["cash"] + u["btc"]*price,
+                  reverse=True)[:top]
+    return ("\n".join(f"**{i+1}. {u['name']}**  ${u['cash']+u['btc']*price:,.0f}"
+                      for i,u in enumerate(rank))
+            if rank else "No players yet.")
 
 def make_daily_digest(series, today, sma30, st):
     yday, week = series[-2], series[-8]
@@ -136,7 +156,7 @@ def make_daily_digest(series, today, sma30, st):
     trend = "📈" if gap > 0 else "📉"
     return (
         f"📊 **BTC Daily Digest — {date.today()}**\n"
-        f"Price: **${today:,.0f}** ({pct(today,yday):+.2f}% 24h, {pct(today,week):+.2f}% 7d) {trend}\n"
+        f"Price: **${today:,.0f}** ({pct(today,yday):+.2f}% 24h, {pct(today,week):+.2f}% 7d) {trend}\n"
         f"SMA30: ${sma30:,.0f} (gap {gap:+.1f} %)\n"
         f"30‑day σ: ${vol30:,.0f}\n"
         f"90‑day range: ${lo90:,.0f} → ${hi90:,.0f}\n"
@@ -154,17 +174,16 @@ def main():
 
     st = load_state()
 
-    # 1) poll & process commands
+    # 1) commands
     cmds = fetch_new_commands(st)
-    portfolio_changed = process_commands(cmds, today, sma30, st["users"])
+    changed_portfolio = process_commands(cmds, today, sma30, st["users"])
 
-    # 2) market BUY/SELL alerts
+    # 2) market buy/sell alerts
     if st["mode"] == "flat" and today <= BUY_DISCOUNT * sma30:
         post(f"🟢 **BUY signal** — price ${today:,.0f} (≤ {int((1-BUY_DISCOUNT)*100)} % below SMA30)")
         st["mode"], st["last_buy"] = "long", today
     elif st["mode"] == "long" and today >= SELL_PREMIUM * st["last_buy"]:
-        gain = pct(today, st["last_buy"])
-        post(f"🔴 **SELL signal** — price ${today:,.0f}  (gain {gain:.1f} %)")
+        post(f"🔴 **SELL signal** — price ${today:,.0f}  (gain {pct(today, st['last_buy']):.1f} %)")
         st["mode"], st["last_buy"] = "flat", None
 
     # 3) daily digest
@@ -172,8 +191,7 @@ def main():
         post(make_daily_digest(series, today, sma30, st))
         st["last_summary"] = today_iso
 
-    # 4) save if anything changed
-    if portfolio_changed or nowUTC.hour == DIGEST_HOUR or cmds:
+    if changed_portfolio or nowUTC.hour == DIGEST_HOUR or cmds:
         save_state(st)
 
 if __name__ == "__main__":
