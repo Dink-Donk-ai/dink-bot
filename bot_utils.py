@@ -77,7 +77,7 @@ async def process_command(pool, ctx, cmd, arg, price, price_cents, sma30, series
     
     elif cmd == "admin":
         admin_args = arg.split() if arg else []
-        return await admin.run(pool, ctx, admin_args, client)
+        return await admin(pool, ctx, admin_args, client)
 
     # New order commands
     elif cmd == "buyorder":
