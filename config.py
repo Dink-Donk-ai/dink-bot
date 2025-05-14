@@ -64,10 +64,12 @@ class Settings(BaseSettings):
             try:
                 return [int(id_str.strip()) for id_str in v.split(',')]
             except ValueError:
-                raise ValueError('DISCORD_ADMIN_USER_IDS must be a comma-separated list of integers')
+                raise ValueError('DISCORD_ADMIN_USER_IDS must be a comma-separated list of integers or a single integer')
+        elif isinstance(v, int):
+            return [v] # If it's already an int, wrap it in a list
         if v is None: # Handles case where env var is not set and default_factory kicks in
             return []
-        return v
+        return v # Should be a list if already processed or from default_factory
 
 try:
     settings = Settings()
