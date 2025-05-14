@@ -7,7 +7,7 @@ import statistics
 from datetime import datetime, timezone, date
 import aiohttp
 import asyncio
-import asyncpg
+from db import init_db
 
 from config import settings
 from commands import buy, sell, balance
@@ -77,10 +77,10 @@ async def process_command(pool, ctx, cmd, arg, price, price_cents, sma30):
 async def main():
     """Main entry point"""
     try:
-        # Initialize database connection
-        pool = await asyncpg.create_pool(settings.database_url)
+        # Initialize database connection using init_db from db.py
+        pool = await init_db(settings.database_url)
         if not pool:
-            print("Failed to create database pool")
+            print("Failed to create database pool via init_db")
             return
 
         # Start Discord client
