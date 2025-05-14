@@ -12,21 +12,21 @@ async def run(pool: asyncpg.Pool, ctx, price: float, price_cents: int, sma: floa
 
     async with pool.acquire() as conn:
         user = await conn.fetchrow("""
-            SELECT cash_c, btc_s FROM users WHERE uid = $1
+            SELECT cash_c, btc_c FROM users WHERE uid = $1
         """, uid)
         if not user:
             # Initialize new user
             await conn.execute("""
-                INSERT INTO users(uid, name, cash_c, btc_s)
+                INSERT INTO users(uid, name, cash_c, btc_c)
                 VALUES($1, $2, $3, $4)
             """, uid, name, 100_000, 0)
-            cash_c, btc_s = 100_000, 0
+            cash_c, btc_c = 100_000, 0
         else:
-            cash_c, btc_s = user['cash_c'], user['btc_s']
+            cash_c, btc_c = user['cash_c'], user['btc_c']
 
-    net_c = cash_c + btc_s * price_cents // SATOSHI
+    net_c = cash_c + btc_c * price_cents // SATOSHI
     await ctx.send(
         f"📄 **{name}** balance: {fmt_usd(cash_c)} cash, "
-        f"{fmt_btc(btc_s)} (net {fmt_usd(net_c)}) | BTC ${price:.0f} ({pct(price, sma):+.1f}% vs SMA30)"
+        f"{fmt_btc(btc_c)} (net {fmt_usd(net_c)}) | BTC ${price:.0f} ({pct(price, sma):+.1f}% vs SMA30)"
     )
     return False

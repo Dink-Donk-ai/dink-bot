@@ -2,6 +2,7 @@
 from discord import TextChannel
 import asyncpg
 from utils import fmt_btc, fmt_usd, pct
+SATOSHI = 100_000_000
 
 async def run(pool: asyncpg.Pool, ctx, arg: str, price: float, price_cents: int, sma: float):
     """
@@ -13,21 +14,21 @@ async def run(pool: asyncpg.Pool, ctx, arg: str, price: float, price_cents: int,
     async with pool.acquire() as conn:
         # Ensure user exists
         await conn.execute("""
-            INSERT INTO users(uid, name, cash_c, btc_s)
+            INSERT INTO users(uid, name, cash_c, btc_c)
             VALUES($1, $2, $3, $4)
             ON CONFLICT(uid) DO NOTHING
         """, uid, name, 100_000, 0)
 
         # Fetch current balances
         user = await conn.fetchrow("""
-            SELECT cash_c, btc_s FROM users WHERE uid = $1
+            SELECT cash_c, btc_c FROM users WHERE uid = $1
         """, uid)
-        cash_c, btc_s = user['cash_c'], user['btc_s']
+        cash_c, btc_c = user['cash_c'], user['btc_c']
 
     # Determine sats to sell
     try:
         if arg.lower() == "all":
-            sats = btc_s
+            sats = btc_c
         else:
             val = float(arg)
             if val < 1:
@@ -37,17 +38,17 @@ async def run(pool: asyncpg.Pool, ctx, arg: str, price: float, price_cents: int,
     except ValueError:
         sats = -1
 
-    if sats <= 0 or sats > btc_s:
+    if sats <= 0 or sats > btc_c:
         await ctx.send(f"⚠️ **{name}** invalid sell amount! | BTC ${price:.0f} ({pct(price, sma):+.1f}% vs SMA30)")
         return False
 
     usd_out = sats * price_cents // SATOSHI
-    new_btc = btc_s - sats
+    new_btc = btc_c - sats
     new_cash = cash_c + usd_out
 
     async with pool.acquire() as conn:
         await conn.execute("""
-            UPDATE users SET cash_c = $1, btc_s = $2 WHERE uid = $3
+            UPDATE users SET cash_c = $1, btc_c = $2 WHERE uid = $3
         """, new_cash, new_btc, uid)
 
     await ctx.send(f"💰 **{name}** sold {fmt_btc(sats)} for {fmt_usd(usd_out)} | BTC ${price:.0f} ({pct(price, sma):+.1f}% vs SMA30)")
