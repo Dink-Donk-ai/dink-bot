@@ -237,7 +237,7 @@ class DinkClient(discord.Client):
         print(f"[DEBUG discord_client.py] Command received: cmd='{cmd}', arg='{arg}'") # DEBUG LOG
 
         # Process command
-        if cmd in ('buy', 'sell', 'balance', 'stats', 'help', 'history', 'admin'):
+        if cmd in ('buy', 'sell', 'balance', 'stats', 'help', 'history', 'admin', 'myorders', 'buyorder', 'sellorder', 'cancelorder'):
             try:
                 # Create a context object similar to what commands expect
                 ctx = type('Context', (), {
