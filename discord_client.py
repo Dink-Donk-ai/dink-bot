@@ -23,6 +23,9 @@ class DinkClient(discord.Client):
         self.series = None
         self.last_summary_date = None
         self.last_hodl_alert_date = None
+        self.sma90 = None
+        self.volume24h = None
+        self.market_cap = None
         
         # Start background tasks
         self.price_update_loop.start()
@@ -64,7 +67,7 @@ class DinkClient(discord.Client):
     async def update_price_data(self):
         """Fetch and update price data"""
         try:
-            self.series, self.price, self.sma30 = await fetch_price_data()
+            self.series, self.price, self.sma30, self.sma90, self.volume24h, self.market_cap = await fetch_price_data()
             if self.price:
                 self.price_cents = int(self.price * 100)
         except Exception as e:
@@ -73,7 +76,7 @@ class DinkClient(discord.Client):
     @tasks.loop(minutes=1)
     async def digest_check_loop(self):
         """Check if it's time to send daily digest"""
-        if not all((self.series, self.price, self.sma30)):
+        if not all((self.series, self.price, self.sma30, self.sma90, self.volume24h, self.market_cap)):
             return
             
         now_utc = datetime.now(timezone.utc)
@@ -82,7 +85,7 @@ class DinkClient(discord.Client):
         if self.last_summary_date != today_iso and now_utc.hour == 8:  # 8 AM UTC
             channel = self.get_channel(settings.channel_id)
             if channel:
-                digest = make_daily_digest(self.series, self.price, self.sma30)
+                digest = make_daily_digest(self.series, self.price, self.sma30, self.sma90, self.volume24h, self.market_cap)
                 await channel.send(digest)
                 self.last_summary_date = today_iso
     
@@ -128,7 +131,10 @@ class DinkClient(discord.Client):
                     self.price,
                     self.price_cents,
                     self.sma30,
-                    self.series
+                    self.series,
+                    self.sma90,
+                    self.volume24h,
+                    self.market_cap
                 )
                 
                 # Delete command message

@@ -24,10 +24,13 @@ async def fetch_price_data():
                 series = [p for _, p in data["prices"]]
                 price = series[-1]
                 sma30 = sum(series[-30:]) / 30
-                return series, price, sma30
-    return None, None, None
+                sma90 = sum(series) / len(series) if series else 0 # Calculate SMA90
+                volume24h = data["total_volumes"][-1][1] if data["total_volumes"] else 0 # Get last 24h volume
+                market_cap = data["market_caps"][-1][1] if data["market_caps"] else 0 # Get last market cap
+                return series, price, sma30, sma90, volume24h, market_cap
+    return None, None, None, None, None, None
 
-async def process_command(pool, ctx, cmd, arg, price, price_cents, sma30, series=None):
+async def process_command(pool, ctx, cmd, arg, price, price_cents, sma30, series=None, sma90=None, volume24h=None, market_cap=None):
     """Process a single command"""
     if cmd == "buy":
         try:
@@ -43,7 +46,7 @@ async def process_command(pool, ctx, cmd, arg, price, price_cents, sma30, series
         return await balance(pool, ctx, price, price_cents, sma30)
         
     elif cmd == "stats":
-        return await stats(pool, ctx, price, price_cents, sma30, series)
+        return await stats(pool, ctx, price, price_cents, sma30, series, sma90, volume24h, market_cap)
         
     elif cmd == "help":
         return await help(pool, ctx, price, price_cents, sma30)

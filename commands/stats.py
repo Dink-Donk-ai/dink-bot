@@ -3,7 +3,7 @@ import asyncpg
 from utils import fmt_btc, fmt_usd, pct, make_daily_digest
 SATOSHI = 100_000_000
 
-async def run(pool: asyncpg.Pool, ctx, price: float, price_cents: int, sma: float, series=None):
+async def run(pool: asyncpg.Pool, ctx, price: float, price_cents: int, sma30: float, series=None, sma90: float=None, volume24h: float=None, market_cap: float=None):
     """
     Shows stats and leaderboard.
     """
@@ -33,8 +33,8 @@ async def run(pool: asyncpg.Pool, ctx, price: float, price_cents: int, sma: floa
 
     # Get daily digest if series is provided
     digest = ""
-    if series:
-        digest = make_daily_digest(series, price, sma)
+    if series and price is not None and sma90 is not None and volume24h is not None and market_cap is not None:
+        digest = make_daily_digest(series, price, sma30, sma90, volume24h, market_cap)
 
     # Combine messages
     await ctx.send(f"{digest}\n{leaderboard}")
