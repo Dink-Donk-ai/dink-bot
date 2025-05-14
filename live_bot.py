@@ -1,140 +1,99 @@
-# commands/buy.py
-from discord import TextChannel
+#!/usr/bin/env python3
+"""
+Dink‑Bot - A Discord bot for simulated Bitcoin trading
+"""
+import json
+import statistics
+from datetime import datetime, timezone, date
+import aiohttp
+import asyncio
 import asyncpg
+
+from config import settings
+from commands import buy, sell, balance
 from utils import fmt_btc, fmt_usd, pct
-SATOSHI = 100_000_000
+from discord_client import start_discord_client
 
-async def run(pool: asyncpg.Pool, ctx, amount_cents: int, price: float, price_cents: int, sma: float):
-    """
-    Handles the buy command.
-    """
-    uid = ctx.author.id
-    name = ctx.author.display_name
+# Constants from original bot
+START_CASH = 100_000  # Moved from commands to here as a global constant
+DIGEST_HOUR = 8
+BUY_DISCOUNT = 0.90
+SELL_PREMIUM = 1.15
 
-    async with pool.acquire() as conn:
-        # Ensure user exists
-        await conn.execute("""
-            INSERT INTO users(uid, name, cash_c, btc_s)
-            VALUES($1, $2, $3, $4)
-            ON CONFLICT(uid) DO NOTHING
-        """, uid, name, 100_000, 0)
+COINGECKO_URL = (
+    "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
+    "?vs_currency=usd&days=90&interval=daily"
+)
 
-        # Fetch current balances
-        user = await conn.fetchrow("""
-            SELECT cash_c, btc_s FROM users WHERE uid = $1
-        """, uid)
-        cash_c, btc_s = user['cash_c'], user['btc_s']
+async def fetch_price_data():
+    """Fetch current BTC price and calculate SMA"""
+    async with aiohttp.ClientSession() as session:
+        async with session.get(COINGECKO_URL) as response:
+            if response.status == 200:
+                data = await response.json()
+                series = [p for _, p in data["prices"]]
+                price = series[-1]
+                sma30 = sum(series[-30:]) / 30
+                return series, price, sma30
+    return None, None, None
 
-        if amount_cents <= 0 or amount_cents > cash_c:
-            await ctx.send(f"⚠️ **{name}** invalid buy amount! | BTC ${price:.0f} ({pct(price, sma):+.1f}% vs SMA30)")
-            return False
-
-        sats = amount_cents * SATOSHI // price_cents
-        if sats == 0:
-            await ctx.send(f"⚠️ **{name}** amount too small! | BTC ${price:.0f} ({pct(price, sma):+.1f}% vs SMA30)")
-            return False
-
-        new_cash = cash_c - amount_cents
-        new_btc = btc_s + sats
-
-        # Update balances
-        await conn.execute("""
-            UPDATE users SET cash_c = $1, btc_s = $2 WHERE uid = $3
-        """, new_cash, new_btc, uid)
-
-    await ctx.send(f"🆕 **{name}** bought {fmt_btc(sats)} for {fmt_usd(amount_cents)} | BTC ${price:.0f} ({pct(price, sma):+.1f}% vs SMA30)")
-    return True
-
-# commands/sell.py
-from discord import TextChannel
-import asyncpg
-from utils import fmt_btc, fmt_usd, pct
-SATOSHI = 100_000_000
-
-async def run(pool: asyncpg.Pool, ctx, arg: str, price: float, price_cents: int, sma: float):
-    """
-    Handles the sell command.
-    """
-    uid = ctx.author.id
-    name = ctx.author.display_name
-
-    async with pool.acquire() as conn:
-        # Ensure user exists
-        await conn.execute("""
-            INSERT INTO users(uid, name, cash_c, btc_s)
-            VALUES($1, $2, $3, $4)
-            ON CONFLICT(uid) DO NOTHING
-        """, uid, name, 100_000, 0)
-
-        # Fetch current balances
-        user = await conn.fetchrow("""
-            SELECT cash_c, btc_s FROM users WHERE uid = $1
-        """, uid)
-        cash_c, btc_s = user['cash_c'], user['btc_s']
-
-    # Determine sats to sell
-    try:
-        if arg.lower() == "all":
-            sats = btc_s
-        else:
-            val = float(arg)
-            if val < 1:
-                sats = int(round(val * SATOSHI))
-            else:
-                sats = int(round(val * 100)) * SATOSHI // price_cents
-    except ValueError:
-        sats = -1
-
-    if sats <= 0 or sats > btc_s:
-        await ctx.send(f"⚠️ **{name}** invalid sell amount! | BTC ${price:.0f} ({pct(price, sma):+.1f}% vs SMA30)")
-        return False
-
-    usd_out = sats * price_cents // SATOSHI
-    new_btc = btc_s - sats
-    new_cash = cash_c + usd_out
-
-    async with pool.acquire() as conn:
-        await conn.execute("""
-            UPDATE users SET cash_c = $1, btc_s = $2 WHERE uid = $3
-        """, new_cash, new_btc, uid)
-
-    await ctx.send(f"💰 **{name}** sold {fmt_btc(sats)} for {fmt_usd(usd_out)} | BTC ${price:.0f} ({pct(price, sma):+.1f}% vs SMA30)")
-    return True
-
-# commands/balance.py
-import asyncpg
-from utils import fmt_btc, fmt_usd, pct
-SATOSHI = 100_000_000
-
-async def run(pool: asyncpg.Pool, ctx, price: float, price_cents: int, sma: float):
-    """
-    Handles the balance command.
-    """
-    uid = ctx.author.id
-    name = ctx.author.display_name
-
-    async with pool.acquire() as conn:
-        user = await conn.fetchrow("""
-            SELECT cash_c, btc_s FROM users WHERE uid = $1
-        """, uid)
-        if not user:
-            # Initialize new user
-            await conn.execute("""
-                INSERT INTO users(uid, name, cash_c, btc_s)
-                VALUES($1, $2, $3, $4)
-            """, uid, name, 100_000, 0)
-            cash_c, btc_s = 100_000, 0
-        else:
-            cash_c, btc_s = user['cash_c'], user['btc_s']
-
-    net_c = cash_c + btc_s * price_cents // SATOSHI
-    await ctx.send(
-        f"📄 **{name}** balance: {fmt_usd(cash_c)} cash, "
-        f"{fmt_btc(btc_s)} (net {fmt_usd(net_c)}) | BTC ${price:.0f} ({pct(price, sma):+.1f}% vs SMA30)"
+def make_daily_digest(series, today, sma30, pool):
+    """Generate daily market digest message"""
+    yday, week = series[-2], series[-8]
+    vol30 = statistics.pstdev(series[-30:])
+    lo90, hi90 = min(series), max(series)
+    gap = pct(today, sma30)
+    trend = "📈" if gap > 0 else "📉"
+    
+    return (
+        f"📊 **BTC Daily Digest — {date.today()}**\n"
+        f"Price: **${today:,.0f}** ({pct(today,yday):+.2f}% 24h, {pct(today,week):+.2f}% 7d) {trend}\n"
+        f"SMA30: ${sma30:,.0f} (gap {gap:+.1f}%)\n"
+        f"30‑day σ: ${vol30:,.0f}\n"
+        f"90‑day range: ${lo90:,.0f} → ${hi90:,.0f}\n"
     )
+
+async def process_command(pool, ctx, cmd, arg, price, price_cents, sma30):
+    """Process a single command"""
+    if cmd == "buy":
+        try:
+            amount_cents = int(float(arg) * 100) if arg else None
+            return await buy.run(pool, ctx, amount_cents, price, price_cents, sma30)
+        except ValueError:
+            return False
+            
+    elif cmd == "sell":
+        return await sell.run(pool, ctx, arg or "all", price, price_cents, sma30)
+            
+    elif cmd == "balance":
+        return await balance.run(pool, ctx, price, price_cents, sma30)
+    
     return False
 
-# commands/__init__.py
-from commands.buy import run as buy
-from commands.sell import run as sell
-from commands.balance import run as balance
+async def main():
+    """Main entry point"""
+    try:
+        # Initialize database connection
+        pool = await asyncpg.create_pool(settings.database_url)
+        if not pool:
+            print("Failed to create database pool")
+            return
+
+        # Start Discord client
+        await start_discord_client(pool)
+
+    except Exception as e:
+        print(f"Fatal error: {e}")
+        raise
+    finally:
+        if pool:
+            await pool.close()
+
+if __name__ == "__main__":
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\nBot stopped by user")
+    except Exception as e:
+        print(f"Fatal error: {e}")
+        raise
