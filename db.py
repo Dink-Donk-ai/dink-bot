@@ -27,7 +27,8 @@ async def init_db(dsn: str, max_retries: int = 5, retry_delay: int = 5) -> Optio
                         cash_c BIGINT NOT NULL, 
                         btc_c BIGINT NOT NULL,
                         cash_held_c BIGINT NOT NULL DEFAULT 0,      -- Added for held cash
-                        btc_held_c BIGINT NOT NULL DEFAULT 0        -- Added for held btc
+                        btc_held_c BIGINT NOT NULL DEFAULT 0,        -- Added for held btc
+                        join_timestamp TIMESTAMPTZ DEFAULT now()    -- Added for join timestamp
                     );
                     CREATE TABLE IF NOT EXISTS prices (
                         ts TIMESTAMPTZ PRIMARY KEY DEFAULT now(),
