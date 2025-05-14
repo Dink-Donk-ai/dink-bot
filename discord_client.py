@@ -85,8 +85,8 @@ class DinkClient(discord.Client):
         if self.last_summary_date != today_iso and now_utc.hour == 8:  # 8 AM UTC
             channel = self.get_channel(settings.channel_id)
             if channel:
-                digest = make_daily_digest(self.series, self.price, self.sma30, self.sma90, self.volume24h, self.market_cap)
-                await channel.send(digest)
+                digest_embed = make_daily_digest(self.series, self.price, self.sma30, self.sma90, self.volume24h, self.market_cap)
+                await channel.send(embed=digest_embed)
                 self.last_summary_date = today_iso
     
     async def on_ready(self):

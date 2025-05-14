@@ -3,6 +3,7 @@
 import statistics
 from datetime import date, timezone, datetime
 from zoneinfo import ZoneInfo
+import discord
 
 SATOSHI = 100_000_000
 
@@ -19,30 +20,30 @@ def pct(current: float, reference: float) -> float:
     return (current / reference - 1) * 100
 
 def make_daily_digest(series, today, sma30, sma90, volume24h, market_cap):
-    """Generate daily market digest message (HODLer focused)"""
+    """Generate daily market digest embed (HODLer focused)"""
     yday, week = series[-2], series[-8]
-    vol30 = statistics.pstdev(series[-30:]) # Still useful for context
+    vol30 = statistics.pstdev(series[-30:])
     lo90, hi90 = min(series), max(series)
     
-    # Trend based on SMA90 for HODLers
     gap_sma90 = pct(today, sma90)
     trend_sma90 = "📈" if gap_sma90 > 0 else "📉"
 
-    # Percent from 90-day high and low
     pct_from_hi90 = pct(today, hi90)
     pct_from_lo90 = pct(today, lo90)
-    
-    return (
-        f"📊 **BTC Daily HODL Digest — {date.today()}**\n"
-        f"Price: **{fmt_usd(int(today*100))}** ({pct(today,yday):+.2f}% 24h, {pct(today,week):+.2f}% 7d)\n"
-        f"Market Cap: **{fmt_usd(int(market_cap*100))}**\n"
-        f"24h Volume: **{fmt_usd(int(volume24h*100))}**\n"
-        f"SMA90: **{fmt_usd(int(sma90*100))}** ({gap_sma90:+.1f}% vs price) {trend_sma90}\n"
-        f"90D High: {fmt_usd(int(hi90*100))} ({pct_from_hi90:.2f}% from high)\n"
-        f"90D Low:  {fmt_usd(int(lo90*100))} ({pct_from_lo90:+.2f}% from low)\n"
-        f"30D Volatility (σ): {fmt_usd(int(vol30*100))}\n"
-        # f"Debug: SMA30: {fmt_usd(int(sma30*100))}" # Kept for debugging, can be removed
+
+    embed = discord.Embed(
+        title=f"📊 BTC Daily HODL Digest — {date.today()}",
+        color=discord.Color.gold()
     )
+    embed.add_field(name="Price", value=f"**{fmt_usd(int(today*100))}** ({pct(today,yday):+.2f}% 24h, {pct(today,week):+.2f}% 7d)", inline=False)
+    embed.add_field(name="Market Cap", value=f"**{fmt_usd(int(market_cap*100))}**", inline=True)
+    embed.add_field(name="24h Volume", value=f"**{fmt_usd(int(volume24h*100))}**", inline=True)
+    embed.add_field(name=f"SMA90 {trend_sma90}", value=f"**{fmt_usd(int(sma90*100))}** ({gap_sma90:+.1f}% vs price)", inline=False)
+    embed.add_field(name="90D High", value=f"{fmt_usd(int(hi90*100))} ({pct_from_hi90:.2f}% from high)", inline=True)
+    embed.add_field(name="90D Low", value=f"{fmt_usd(int(lo90*100))} ({pct_from_lo90:+.2f}% from low)", inline=True)
+    embed.add_field(name="30D Volatility (σ)", value=f"{fmt_usd(int(vol30*100))}", inline=False)
+    
+    return embed
 
 def fmt_datetime_local(dt_utc: datetime) -> str:
     """Formats a UTC datetime object to a local timezone string (Europe/Tallinn)."""

@@ -32,10 +32,12 @@ async def run(pool: asyncpg.Pool, ctx, price: float, price_cents: int, sma30: fl
         )
 
     # Get daily digest if series is provided
-    digest = ""
-    if series and price is not None and sma90 is not None and volume24h is not None and market_cap is not None:
-        digest = make_daily_digest(series, price, sma30, sma90, volume24h, market_cap)
+    digest_embed = None
+    if series and price is not None and sma30 is not None and sma90 is not None and volume24h is not None and market_cap is not None:
+        digest_embed = make_daily_digest(series, price, sma30, sma90, volume24h, market_cap)
 
     # Combine messages
-    await ctx.send(f"{digest}\n{leaderboard}")
+    if digest_embed:
+        await ctx.send(embed=digest_embed)
+    await ctx.send(leaderboard) # Send leaderboard as a separate message
     return True 
