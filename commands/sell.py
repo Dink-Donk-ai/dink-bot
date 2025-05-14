@@ -2,6 +2,7 @@
 from discord import TextChannel
 import asyncpg
 from utils import fmt_btc, fmt_usd, pct
+import discord
 SATOSHI = 100_000_000
 
 async def run(pool: asyncpg.Pool, ctx, arg: str, price: float, price_cents: int, sma: float):
@@ -57,5 +58,16 @@ async def run(pool: asyncpg.Pool, ctx, arg: str, price: float, price_cents: int,
             VALUES ($1, $2, 'sell', $3, $4, $5)
         """, uid, name, sats, usd_out, price_cents)
 
-    await ctx.send(f"💰 **{name}** sold {fmt_btc(sats)} for {fmt_usd(usd_out)} | BTC ${price:.0f} ({pct(price, sma):+.1f}% vs SMA30)")
+    # Create embed for success message
+    embed = discord.Embed(
+        title="💰 Sell Successful!",
+        color=discord.Color.orange() # Using orange for sell
+    )
+    embed.add_field(name="User", value=name, inline=False)
+    embed.add_field(name="Sold", value=fmt_btc(sats), inline=True)
+    embed.add_field(name="Received", value=fmt_usd(usd_out), inline=True)
+    embed.add_field(name="Price", value=fmt_usd(price_cents), inline=False)
+    embed.set_footer(text=f"Current BTC Price: ${price:,.0f} ({pct(price, sma):+.1f}% vs SMA30)")
+    
+    await ctx.send(embed=embed)
     return True
