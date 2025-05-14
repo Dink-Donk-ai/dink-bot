@@ -7,7 +7,7 @@ import asyncio
 from datetime import datetime, timezone
 
 from config import settings
-from bot_utils import fetch_price_data, HODL_BUY_DIP_THRESHOLD
+from bot_utils import fetch_price_data, HODL_BUY_DIP_THRESHOLD, process_command
 from utils import make_daily_digest, fmt_btc, fmt_usd
 
 SATOSHI = 100_000_000
@@ -241,7 +241,8 @@ class DinkClient(discord.Client):
                 ctx = type('Context', (), {
                     'author': message.author,
                     'send': message.channel.send,
-                    'message': message
+                    'message': message,
+                    'guild': message.guild
                 })
                 
                 await process_command(
@@ -266,7 +267,13 @@ class DinkClient(discord.Client):
                     
             except Exception as e:
                 print(f"Error processing command: {e}")
-                await message.channel.send(f"⚠️ Error processing command: {str(e)}")
+                # Send error to Discord channel
+                error_embed = discord.Embed(title="⚠️ Command Error", description=f"Oops! Something went wrong processing `!{cmd}`.", color=discord.Color.red())
+                error_embed.add_field(name="Details", value=str(e) if str(e) else "An unexpected error occurred.")
+                try:
+                    await message.channel.send(embed=error_embed)
+                except Exception as send_e:
+                    print(f"Additionally, failed to send error embed to channel: {send_e}")
 
 async def start_discord_client(pool):
     """Start the Discord client"""
