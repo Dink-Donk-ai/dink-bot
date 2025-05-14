@@ -11,6 +11,12 @@ async def run(pool: asyncpg.Pool, ctx, amount_cents: int, price: float, price_ce
     uid = ctx.author.id
     name = ctx.author.display_name
 
+    if amount_cents is None: # Handle case where !buy is called with no amount
+        await ctx.send(f"Usage: `!buy <amount_usd>` or `!buy all`")
+        return False
+
+    print(f"Attempting buy for {name} (uid: {uid}): amount_cents={amount_cents}, price_cents={price_cents}") # Logging
+
     async with pool.acquire() as conn:
         # Ensure user exists
         await conn.execute("""
@@ -25,13 +31,17 @@ async def run(pool: asyncpg.Pool, ctx, amount_cents: int, price: float, price_ce
         """, uid)
         cash_c, btc_c = user['cash_c'], user['btc_c']
 
+        print(f"User {name}: cash_c={cash_c}, btc_c={btc_c}") # Logging
+
         if amount_cents <= 0 or amount_cents > cash_c:
-            await ctx.send(f"⚠️ **{name}** invalid buy amount! | BTC ${price:.0f} ({pct(price, sma):+.1f}% vs SMA30)")
+            await ctx.send(f"⚠️ **{name}** invalid buy amount! (Available: {fmt_usd(cash_c)}) | BTC ${price:.0f} ({pct(price, sma):+.1f}% vs SMA30)")
             return False
 
         sats = amount_cents * SATOSHI // price_cents
+        print(f"Calculated sats for {name}: {sats}") # Logging
+
         if sats == 0:
-            await ctx.send(f"⚠️ **{name}** amount too small! | BTC ${price:.0f} ({pct(price, sma):+.1f}% vs SMA30)")
+            await ctx.send(f"⚠️ **{name}** amount too small to buy any BTC! | BTC ${price:.0f} ({pct(price, sma):+.1f}% vs SMA30)")
             return False
 
         new_cash = cash_c - amount_cents
