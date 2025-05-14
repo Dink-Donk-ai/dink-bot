@@ -51,5 +51,11 @@ async def run(pool: asyncpg.Pool, ctx, arg: str, price: float, price_cents: int,
             UPDATE users SET cash_c = $1, btc_c = $2 WHERE uid = $3
         """, new_cash, new_btc, uid)
 
+        # Log the transaction
+        await conn.execute("""
+            INSERT INTO transactions (uid, name, transaction_type, btc_amount_sats, usd_amount_cents, price_at_transaction_cents)
+            VALUES ($1, $2, 'sell', $3, $4, $5)
+        """, uid, name, sats, usd_out, price_cents)
+
     await ctx.send(f"💰 **{name}** sold {fmt_btc(sats)} for {fmt_usd(usd_out)} | BTC ${price:.0f} ({pct(price, sma):+.1f}% vs SMA30)")
     return True

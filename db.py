@@ -31,6 +31,16 @@ async def init_db(dsn: str, max_retries: int = 5, retry_delay: int = 5) -> Optio
                         ts TIMESTAMPTZ PRIMARY KEY DEFAULT now(),
                         price_c BIGINT NOT NULL
                     );
+                    CREATE TABLE IF NOT EXISTS transactions (
+                        transaction_id SERIAL PRIMARY KEY,
+                        uid BIGINT NOT NULL,
+                        name TEXT NOT NULL,
+                        transaction_type TEXT NOT NULL,                       -- 'buy' or 'sell'
+                        btc_amount_sats BIGINT NOT NULL,
+                        usd_amount_cents BIGINT NOT NULL,
+                        price_at_transaction_cents BIGINT NOT NULL,         -- Price of 1 BTC in USD cents
+                        timestamp TIMESTAMPTZ DEFAULT now()
+                    );
                 """)
             print("Successfully connected to database")
             return pool

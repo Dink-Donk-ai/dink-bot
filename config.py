@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     channel_id: int = Field(alias='DISCORD_CHANNEL_ID')
     database_url: str = Field(alias='DATABASE_URL')
     webhook_url: str = Field(alias='DISCORD_WEBHOOK_URL')
+    admin_user_ids: list[int] = Field(default_factory=list, alias='DISCORD_ADMIN_USER_IDS')
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -52,6 +53,20 @@ class Settings(BaseSettings):
             raise ValueError('DATABASE_URL environment variable is required')
         if not v.startswith(('postgresql://', 'postgres://')):
             raise ValueError('DATABASE_URL must be a valid PostgreSQL URL')
+        return v
+
+    @field_validator('admin_user_ids', mode='before')
+    @classmethod
+    def validate_admin_ids(cls, v):
+        if isinstance(v, str):
+            if not v.strip(): # Handle empty string case for default_factory
+                return []
+            try:
+                return [int(id_str.strip()) for id_str in v.split(',')]
+            except ValueError:
+                raise ValueError('DISCORD_ADMIN_USER_IDS must be a comma-separated list of integers')
+        if v is None: # Handles case where env var is not set and default_factory kicks in
+            return []
         return v
 
 try:

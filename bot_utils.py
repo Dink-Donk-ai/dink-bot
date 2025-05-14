@@ -2,14 +2,13 @@
 Shared utility functions for the Discord bot
 """
 import aiohttp
-from utils import fmt_btc, fmt_usd, pct
-from commands import buy, sell, balance, stats, help
+from utils import fmt_btc, fmt_usd, pct, make_daily_digest
+from commands import buy, sell, balance, stats, help, history, admin
 
 # Constants
 START_CASH = 100_000
 DIGEST_HOUR = 8
-BUY_DISCOUNT = 0.90
-SELL_PREMIUM = 1.15
+HODL_BUY_DIP_THRESHOLD = 0.30 # Percentage drop from 90-day high to trigger HODL alert
 
 COINGECKO_URL = (
     "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart"
@@ -48,5 +47,14 @@ async def process_command(pool, ctx, cmd, arg, price, price_cents, sma30, series
         
     elif cmd == "help":
         return await help(pool, ctx, price, price_cents, sma30)
+    
+    elif cmd == "history":
+        return await history(pool, ctx, price, price_cents, sma30)
+    
+    elif cmd == "admin":
+        # The admin command expects a list of arguments: [sub_command, target_user, ...values]
+        # The 'arg' here is the string of all arguments after '!admin '
+        admin_args = arg.split() if arg else []
+        return await admin(pool, ctx, admin_args)
     
     return False 

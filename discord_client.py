@@ -7,7 +7,7 @@ import asyncio
 from datetime import datetime, timezone
 
 from config import settings
-from bot_utils import process_command, fetch_price_data
+from bot_utils import process_command, fetch_price_data, HODL_BUY_DIP_THRESHOLD
 from utils import make_daily_digest
 
 class DinkClient(discord.Client):
@@ -22,6 +22,7 @@ class DinkClient(discord.Client):
         self.sma30 = None
         self.series = None
         self.last_summary_date = None
+        self.last_hodl_alert_date = None
         
         # Start background tasks
         self.price_update_loop.start()
@@ -34,7 +35,32 @@ class DinkClient(discord.Client):
     async def price_update_loop(self):
         """Update price data every 5 minutes"""
         await self.update_price_data()
-        
+
+        if not all((self.series, self.price)):
+            return
+
+        try:
+            now_utc = datetime.now(timezone.utc)
+            today_iso_date = now_utc.date().isoformat()
+
+            if self.last_hodl_alert_date != today_iso_date:
+                ninety_day_high = max(self.series) if self.series else 0
+                
+                if ninety_day_high > 0 and self.price < (ninety_day_high * (1 - HODL_BUY_DIP_THRESHOLD)):
+                    channel = self.get_channel(settings.channel_id)
+                    if channel:
+                        percentage_drop = (1 - (self.price / ninety_day_high)) * 100
+                        alert_message = (
+                            f"📉 **HODL Alert!** 📉\n"
+                            f"Bitcoin is trading at **${self.price:,.2f}**.\n"
+                            f"This is **{percentage_drop:.2f}%** below its 90-day high of ${ninety_day_high:,.2f}.\n"
+                            f"Consider buying the dip!"
+                        )
+                        await channel.send(alert_message)
+                        self.last_hodl_alert_date = today_iso_date
+        except Exception as e:
+            print(f"Error during HODL alert check: {e}")
+            
     async def update_price_data(self):
         """Fetch and update price data"""
         try:
@@ -85,7 +111,7 @@ class DinkClient(discord.Client):
         arg = parts[1] if len(parts) > 1 else None
         
         # Process command
-        if cmd in ('buy', 'sell', 'balance', 'stats', 'help'):
+        if cmd in ('buy', 'sell', 'balance', 'stats', 'help', 'history', 'admin'):
             try:
                 # Create a context object similar to what commands expect
                 ctx = type('Context', (), {

@@ -20,6 +20,9 @@ Sell BTC for USD amount (e.g. `!sell 0.001` or `!sell all`)
 `!stats`
 Show market stats and leaderboard
 
+`!history`
+Show your last 10 transactions
+
 `!help`
 Show this help message
 

@@ -1,7 +1,7 @@
 # utils.py
 
 import statistics
-from datetime import date
+from datetime import date, timezone, datetime
 
 SATOSHI = 100_000_000
 
@@ -32,3 +32,11 @@ def make_daily_digest(series, today, sma30):
         f"30‑day σ: ${vol30:,.0f}\n"
         f"90‑day range: ${lo90:,.0f} → ${hi90:,.0f}\n"
     )
+
+def fmt_datetime_local(dt_utc: datetime) -> str:
+    """Formats a UTC datetime object to a local timezone string."""
+    if dt_utc is None:
+        return "N/A"
+    # Convert UTC to local timezone
+    dt_local = dt_utc.replace(tzinfo=timezone.utc).astimezone(tz=None)
+    return dt_local.strftime("%Y-%m-%d %I:%M:%S %p %Z")
