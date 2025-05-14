@@ -46,6 +46,8 @@ async def fetch_price_data():
 
 async def process_command(pool, ctx, cmd, arg, price, price_cents, sma30, series=None, sma90=None, volume24h=None, market_cap=None):
     """Process a single command"""
+    print(f"[DEBUG bot_utils.py process_command] Received cmd: '{cmd}', arg: '{arg}' for user: {ctx.author.name}") # DEBUG LOG
+
     if cmd == "buy":
         try:
             # Ensure arg is processed correctly for buy.run which expects amount_cents
