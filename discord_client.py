@@ -234,6 +234,8 @@ class DinkClient(discord.Client):
         cmd = parts[0]
         arg = parts[1] if len(parts) > 1 else None
         
+        print(f"[DEBUG discord_client.py] Command received: cmd='{cmd}', arg='{arg}'") # DEBUG LOG
+
         # Process command
         if cmd in ('buy', 'sell', 'balance', 'stats', 'help', 'history', 'admin'):
             try:

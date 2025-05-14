@@ -99,6 +99,7 @@ async def process_command(pool, ctx, cmd, arg, price, price_cents, sma30, series
         return await cancel_order(pool, ctx, arg)
 
     elif cmd == "myorders":
+        print(f"[DEBUG bot_utils.py] Entered 'myorders' processing branch for user: {ctx.author.name}") # DEBUG LOG
         return await list_my_orders(pool, ctx)
     
     return False 

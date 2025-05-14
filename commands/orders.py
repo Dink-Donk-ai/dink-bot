@@ -212,6 +212,7 @@ async def cancel_order(pool: asyncpg.Pool, ctx, order_id_str: str):
 
 async def list_my_orders(pool: asyncpg.Pool, ctx):
     """Handles !myorders"""
+    print(f"[DEBUG commands/orders.py] list_my_orders function called by: {ctx.author.name}") # DEBUG LOG
     uid = ctx.author.id
     name = ctx.author.display_name
 
