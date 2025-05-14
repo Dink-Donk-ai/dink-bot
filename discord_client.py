@@ -4,7 +4,7 @@ import asyncio
 from datetime import datetime, timezone
 
 from config import settings
-from live_bot import process_command, fetch_price_data, make_daily_digest
+from bot_utils import process_command, fetch_price_data, make_daily_digest
 
 class DinkClient(discord.Client):
     def __init__(self, pool):
