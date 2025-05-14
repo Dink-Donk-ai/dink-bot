@@ -2,6 +2,7 @@
 
 import statistics
 from datetime import date, timezone, datetime
+from zoneinfo import ZoneInfo
 
 SATOSHI = 100_000_000
 
@@ -34,9 +35,18 @@ def make_daily_digest(series, today, sma30):
     )
 
 def fmt_datetime_local(dt_utc: datetime) -> str:
-    """Formats a UTC datetime object to a local timezone string."""
+    """Formats a UTC datetime object to a local timezone string (Europe/Tallinn)."""
     if dt_utc is None:
         return "N/A"
-    # Convert UTC to local timezone
-    dt_local = dt_utc.replace(tzinfo=timezone.utc).astimezone(tz=None)
-    return dt_local.strftime("%Y-%m-%d %I:%M:%S %p %Z")
+    
+    # Ensure the datetime object is timezone-aware (UTC)
+    if dt_utc.tzinfo is None:
+        dt_utc = dt_utc.replace(tzinfo=timezone.utc)
+    else:
+        dt_utc = dt_utc.astimezone(timezone.utc) # Convert to UTC if it's some other timezone
+
+    # Convert UTC to Europe/Tallinn timezone
+    tallinn_tz = ZoneInfo("Europe/Tallinn")
+    dt_tallinn = dt_utc.astimezone(tallinn_tz)
+    
+    return dt_tallinn.strftime("%Y-%m-%d %I:%M:%S %p %Z")
