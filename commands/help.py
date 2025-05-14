@@ -38,6 +38,31 @@ async def run(pool: asyncpg.Pool, ctx, price: float, price_cents: int, sma: floa
         inline=False
     )
     embed.add_field(
+        name="--- Order Commands ---",
+        value="Place and manage limit orders:",
+        inline=False 
+    )
+    embed.add_field(
+        name="`!buyorder <btc_amount> <price_usd>`",
+        value="Place a limit order to buy a specific amount of BTC at a desired USD price per BTC (e.g., `!buyorder 0.1 20000`).",
+        inline=False
+    )
+    embed.add_field(
+        name="`!sellorder <btc_amount> <price_usd>`",
+        value="Place a limit order to sell a specific amount of BTC at a desired USD price per BTC (e.g., `!sellorder 0.05 22000`).",
+        inline=False
+    )
+    embed.add_field(
+        name="`!cancelorder <order_id>`",
+        value="Cancel an open limit order using its ID.",
+        inline=False
+    )
+    embed.add_field(
+        name="`!myorders`",
+        value="List all your currently open limit orders.",
+        inline=False
+    )
+    embed.add_field(
         name="`!help`",
         value="Show this help message.",
         inline=False

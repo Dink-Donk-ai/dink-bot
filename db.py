@@ -25,7 +25,9 @@ async def init_db(dsn: str, max_retries: int = 5, retry_delay: int = 5) -> Optio
                         uid BIGINT PRIMARY KEY, 
                         name TEXT, 
                         cash_c BIGINT NOT NULL, 
-                        btc_c BIGINT NOT NULL
+                        btc_c BIGINT NOT NULL,
+                        cash_held_c BIGINT NOT NULL DEFAULT 0,      -- Added for held cash
+                        btc_held_c BIGINT NOT NULL DEFAULT 0        -- Added for held btc
                     );
                     CREATE TABLE IF NOT EXISTS prices (
                         ts TIMESTAMPTZ PRIMARY KEY DEFAULT now(),
@@ -41,8 +43,20 @@ async def init_db(dsn: str, max_retries: int = 5, retry_delay: int = 5) -> Optio
                         price_at_transaction_cents BIGINT NOT NULL,         -- Price of 1 BTC in USD cents
                         timestamp TIMESTAMPTZ DEFAULT now()
                     );
+                    CREATE TABLE IF NOT EXISTS orders (
+                        order_id SERIAL PRIMARY KEY,
+                        uid BIGINT NOT NULL REFERENCES users(uid) ON DELETE CASCADE, -- Foreign key to users
+                        name TEXT,                                          -- User's name at time of order
+                        order_type TEXT NOT NULL,                           -- 'buy' or 'sell'
+                        btc_amount_sats BIGINT NOT NULL,
+                        sats_filled BIGINT NOT NULL DEFAULT 0,
+                        limit_price_cents BIGINT NOT NULL,                  -- Price of 1 BTC in USD cents
+                        usd_value_cents BIGINT NOT NULL,                    -- Total USD value of order (cost for buy, expected for sell)
+                        status TEXT NOT NULL DEFAULT 'open',                -- 'open', 'filled', 'cancelled', 'partially_filled'
+                        timestamp TIMESTAMPTZ DEFAULT now()
+                    );
                 """)
-            print("Successfully connected to database")
+            print("Successfully connected to database and ensured schema.")
             return pool
             
         except (asyncpg.PostgresError, asyncpg.InvalidCatalogNameError) as e:

@@ -63,12 +63,19 @@ async def run(pool: asyncpg.Pool, ctx, args: list[str] = None):
     if sub_command == "resetuser":
         async with pool.acquire() as conn:
             async with conn.transaction():
+                # Reset user's cash and btc
                 await conn.execute("""
                     INSERT INTO users (uid, name, cash_c, btc_c)
                     VALUES ($1, $2, $3, $4)
                     ON CONFLICT (uid) DO UPDATE SET name = EXCLUDED.name, cash_c = EXCLUDED.cash_c, btc_c = EXCLUDED.btc_c
                 """, target_user_id, target_user_name, INITIAL_CASH_CENTS, 0)
-        await ctx.send(f"✅ User **{target_user_name}** (ID: {target_user_id}) has been reset to {fmt_usd(INITIAL_CASH_CENTS)} and 0 BTC.")
+                
+                # Delete user's transaction history
+                await conn.execute("""
+                    DELETE FROM transactions WHERE uid = $1
+                """, target_user_id)
+                
+        await ctx.send(f"✅ User **{target_user_name}** (ID: {target_user_id}) has been reset to {fmt_usd(INITIAL_CASH_CENTS)}, 0 BTC, and their transaction history has been cleared.")
         return True
 
     elif sub_command == "givecash":
