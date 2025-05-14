@@ -247,6 +247,10 @@ class DinkClient(discord.Client):
                     'guild': message.guild
                 })
                 
+                print(f"[DEBUG discord_client.py on_message] About to call process_command. cmd='{cmd}'") # Log before call
+                print(f"[DEBUG discord_client.py on_message] Price-related args: price={self.price}, price_cents={self.price_cents}, sma30={self.sma30}") # Log price args
+                # print(f"[DEBUG discord_client.py on_message] Series data: series_len={len(self.series) if self.series else 'None'}, sma90={self.sma90}, vol24h={self.volume24h}, cap={self.market_cap}") # More detailed if needed
+
                 await process_command(
                     self.pool,
                     ctx,
