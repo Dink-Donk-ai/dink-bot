@@ -1,32 +1,49 @@
 # commands/help.py
 import asyncpg
+import discord
 
 async def run(pool: asyncpg.Pool, ctx, price: float, price_cents: int, sma: float):
     """
     Shows help message with available commands.
     """
-    help_text = """
-📖 **Available Commands**
+    embed = discord.Embed(
+        title="📖 Dink-Bot Help",
+        description="Here are the available commands:",
+        color=discord.Color.blue() # Or any color you prefer for help
+    )
 
-`!balance`
-Check your current balance of cash and BTC
+    embed.add_field(
+        name="`!balance`",
+        value="Check your current balance of cash and BTC.",
+        inline=False
+    )
+    embed.add_field(
+        name="`!buy <amount>`",
+        value="Buy BTC with USD amount (e.g. `!buy 100` or `!buy all`).",
+        inline=False
+    )
+    embed.add_field(
+        name="`!sell <amount>`",
+        value="Sell BTC for USD amount (e.g. `!sell 0.001` or `!sell all`).",
+        inline=False
+    )
+    embed.add_field(
+        name="`!stats`",
+        value="Show market stats and leaderboard.",
+        inline=False
+    )
+    embed.add_field(
+        name="`!history`",
+        value="Show your last 10 transactions.",
+        inline=False
+    )
+    embed.add_field(
+        name="`!help`",
+        value="Show this help message.",
+        inline=False
+    )
 
-`!buy <amount>`
-Buy BTC with USD amount (e.g. `!buy 100` or `!buy all`)
+    embed.set_footer(text="All commands are deleted after processing to keep the channel clean.")
 
-`!sell <amount>`
-Sell BTC for USD amount (e.g. `!sell 0.001` or `!sell all`)
-
-`!stats`
-Show market stats and leaderboard
-
-`!history`
-Show your last 10 transactions
-
-`!help`
-Show this help message
-
-All commands are deleted after processing to keep the channel clean.
-"""
-    await ctx.send(help_text)
+    await ctx.send(embed=embed)
     return True 

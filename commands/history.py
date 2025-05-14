@@ -1,6 +1,7 @@
 # commands/history.py
 import asyncpg
 from utils import fmt_btc, fmt_usd, fmt_datetime_local
+import discord
 
 SATOSHI = 100_000_000
 
@@ -21,10 +22,19 @@ async def run(pool: asyncpg.Pool, ctx, price: float, price_cents: int, sma: floa
         """, uid)
 
     if not transactions:
-        await ctx.send(f"📜 **{name}**, you have no transaction history yet.")
+        embed = discord.Embed(
+            title=f"📜 {name}'s Transaction History",
+            description="You have no transaction history yet.",
+            color=discord.Color.light_grey()
+        )
+        await ctx.send(embed=embed)
         return True
 
-    history_message = f"📜 **{name}'s Last 10 Transactions:**\n\n"
+    embed = discord.Embed(
+        title=f"📜 {name}'s Last 10 Transactions",
+        color=discord.Color.purple()
+    )
+
     for tx in transactions:
         tx_type = tx['transaction_type'].capitalize()
         btc_val = fmt_btc(tx['btc_amount_sats'])
@@ -32,8 +42,9 @@ async def run(pool: asyncpg.Pool, ctx, price: float, price_cents: int, sma: floa
         price_val = fmt_usd(tx['price_at_transaction_cents'])
         timestamp_val = fmt_datetime_local(tx['timestamp'])
 
-        history_message += f"**{tx_type}**: {btc_val} for {usd_val} (Price: {price_val})\n"
-        history_message += f"  *At: {timestamp_val}*\n"
-
-    await ctx.send(history_message)
+        field_name = f"**{tx_type}** - {timestamp_val}"
+        field_value = f"{btc_val} for {usd_val} (Price: {price_val})"
+        embed.add_field(name=field_name, value=field_value, inline=False)
+    
+    await ctx.send(embed=embed)
     return True 
