@@ -5,6 +5,7 @@ import statistics
 from datetime import date
 import aiohttp
 from utils import fmt_btc, fmt_usd, pct
+from commands import buy, sell, balance
 
 # Constants
 START_CASH = 100_000
@@ -47,19 +48,17 @@ def make_daily_digest(series, today, sma30, pool):
 
 async def process_command(pool, ctx, cmd, arg, price, price_cents, sma30):
     """Process a single command"""
-    from commands import buy, sell, balance  # Import here to avoid circular imports
-    
     if cmd == "buy":
         try:
             amount_cents = int(float(arg) * 100) if arg else None
-            return await buy.run(pool, ctx, amount_cents, price, price_cents, sma30)
+            return await buy(pool, ctx, amount_cents, price, price_cents, sma30)
         except ValueError:
             return False
             
     elif cmd == "sell":
-        return await sell.run(pool, ctx, arg or "all", price, price_cents, sma30)
+        return await sell(pool, ctx, arg or "all", price, price_cents, sma30)
             
     elif cmd == "balance":
-        return await balance.run(pool, ctx, price, price_cents, sma30)
+        return await balance(pool, ctx, price, price_cents, sma30)
     
     return False 
