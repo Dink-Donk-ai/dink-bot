@@ -1,6 +1,6 @@
 import os
 from typing import Optional
-from pydantic import field_validator
+from pydantic import field_validator, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class Settings(BaseSettings):
@@ -12,27 +12,36 @@ class Settings(BaseSettings):
     - DATABASE_URL: PostgreSQL connection URL (provided by Railway)
     - DISCORD_WEBHOOK_URL: Discord webhook URL for notifications
     """
-    discord_token: str = None
-    channel_id: int = None
-    database_url: str
-    webhook_url: str = None
+    discord_token: str = Field(alias='DISCORD_BOT_TOKEN')
+    channel_id: int = Field(alias='DISCORD_CHANNEL_ID')
+    database_url: str = Field(alias='DATABASE_URL')
+    webhook_url: str = Field(alias='DISCORD_WEBHOOK_URL')
 
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding='utf-8',
-        env_prefix='DISCORD_',  # Look for DISCORD_ prefixed env vars
-        env_nested_delimiter='_',
-        alias_generator=lambda s: s.upper(),  # Convert field names to uppercase for env matching
+        case_sensitive=True,
+        extra='ignore'
     )
 
-    @field_validator('discord_token', 'channel_id', 'webhook_url')
+    @field_validator('discord_token')
     @classmethod
-    def validate_required(cls, v, info):
-        if not v and info.field_name == 'discord_token':
+    def validate_token(cls, v):
+        if not v:
             raise ValueError('DISCORD_BOT_TOKEN environment variable is required')
-        if not v and info.field_name == 'channel_id':
+        return v
+
+    @field_validator('channel_id')
+    @classmethod
+    def validate_channel(cls, v):
+        if not v:
             raise ValueError('DISCORD_CHANNEL_ID environment variable is required')
-        if not v and info.field_name == 'webhook_url':
+        return v
+
+    @field_validator('webhook_url')
+    @classmethod
+    def validate_webhook(cls, v):
+        if not v:
             raise ValueError('DISCORD_WEBHOOK_URL environment variable is required')
         return v
 
