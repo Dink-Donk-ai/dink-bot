@@ -1,7 +1,6 @@
 # commands/stats.py
 import asyncpg
-from utils import fmt_btc, fmt_usd, pct
-from bot_utils import make_daily_digest
+from utils import fmt_btc, fmt_usd, pct, make_daily_digest
 SATOSHI = 100_000_000
 
 async def run(pool: asyncpg.Pool, ctx, price: float, price_cents: int, sma: float, series=None):
@@ -35,7 +34,7 @@ async def run(pool: asyncpg.Pool, ctx, price: float, price_cents: int, sma: floa
     # Get daily digest if series is provided
     digest = ""
     if series:
-        digest = make_daily_digest(series, price, sma, pool)
+        digest = make_daily_digest(series, price, sma)
 
     # Combine messages
     await ctx.send(f"{digest}\n{leaderboard}")

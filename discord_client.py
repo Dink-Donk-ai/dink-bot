@@ -7,7 +7,8 @@ import asyncio
 from datetime import datetime, timezone
 
 from config import settings
-from bot_utils import process_command, fetch_price_data, make_daily_digest
+from bot_utils import process_command, fetch_price_data
+from utils import make_daily_digest
 
 class DinkClient(discord.Client):
     def __init__(self, pool):
@@ -55,7 +56,7 @@ class DinkClient(discord.Client):
         if self.last_summary_date != today_iso and now_utc.hour == 8:  # 8 AM UTC
             channel = self.get_channel(settings.channel_id)
             if channel:
-                digest = make_daily_digest(self.series, self.price, self.sma30, self.pool)
+                digest = make_daily_digest(self.series, self.price, self.sma30)
                 await channel.send(digest)
                 self.last_summary_date = today_iso
     
