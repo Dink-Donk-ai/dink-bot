@@ -1,3 +1,6 @@
+"""
+Discord client implementation
+"""
 import discord
 from discord.ext import tasks
 import asyncio
@@ -81,7 +84,7 @@ class DinkClient(discord.Client):
         arg = parts[1] if len(parts) > 1 else None
         
         # Process command
-        if cmd in ('buy', 'sell', 'balance'):
+        if cmd in ('buy', 'sell', 'balance', 'stats', 'help'):
             try:
                 # Create a context object similar to what commands expect
                 ctx = type('Context', (), {
@@ -97,7 +100,8 @@ class DinkClient(discord.Client):
                     arg,
                     self.price,
                     self.price_cents,
-                    self.sma30
+                    self.sma30,
+                    self.series
                 )
                 
                 # Delete command message
