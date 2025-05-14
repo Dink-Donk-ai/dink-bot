@@ -44,7 +44,7 @@ async def fetch_price_data():
     print("Failed to fetch price data from Coingecko, HTTP error.")
     return None, None, None, None, None, None
 
-async def process_command(pool, ctx, cmd, arg, price, price_cents, sma30, series=None, sma90=None, volume24h=None, market_cap=None):
+async def process_command(pool, ctx, cmd, arg, price, price_cents, sma30, series, sma90, volume24h, market_cap, client):
     """Process a single command"""
     print(f"[DEBUG bot_utils.py process_command] Received cmd: '{cmd}', arg: '{arg}' for user: {ctx.author.name}") # DEBUG LOG
 
@@ -55,37 +55,37 @@ async def process_command(pool, ctx, cmd, arg, price, price_cents, sma30, series
             if arg and ',' in arg and '.' not in arg: 
                 processed_arg = arg.replace(',', '.')
             amount_cents = int(float(processed_arg) * 100) if processed_arg else None
-            return await buy(pool, ctx, amount_cents, price, price_cents, sma30)
+            return await buy.run(pool, ctx, amount_cents, price, price_cents, sma30)
         except ValueError:
             await ctx.send(f"⚠️ Invalid amount for `!buy`. Please use a number like `100` or `100.50`.")
             return False
             
     elif cmd == "sell":
-        return await sell(pool, ctx, arg or "all", price, price_cents, sma30)
+        return await sell.run(pool, ctx, arg or "all", price, price_cents, sma30)
             
     elif cmd == "balance":
-        return await balance(pool, ctx, price, price_cents, sma30)
+        return await balance.run(pool, ctx, price, price_cents, sma30)
         
     elif cmd == "stats":
-        return await stats(pool, ctx, price, price_cents, sma30, series, sma90, volume24h, market_cap)
+        return await stats.run(pool, ctx, price, price_cents, sma30, series, sma90, volume24h, market_cap)
         
     elif cmd == "help":
-        return await help(pool, ctx, price, price_cents, sma30)
+        return await help.run(pool, ctx, price, price_cents, sma30)
     
     elif cmd == "history":
-        return await history(pool, ctx, price, price_cents, sma30)
+        return await history.run(pool, ctx, price, price_cents, sma30)
     
     elif cmd == "admin":
         admin_args = arg.split() if arg else []
-        return await admin(pool, ctx, admin_args)
+        return await admin.run(pool, ctx, admin_args, client)
 
     # New order commands
     elif cmd == "buyorder":
         if not arg or len(arg.split()) != 2:
-            await ctx.send("Usage: `!buyorder <amount_btc> <price_usd>`")
+            await ctx.send("Usage: `!buyorder <usd_amount_to_spend> <price_usd>`")
             return False
-        btc_amount_str, limit_price_str = arg.split()
-        return await place_buy_order(pool, ctx, btc_amount_str, limit_price_str, price_cents)
+        usd_amount_to_spend_str, limit_price_str = arg.split()
+        return await place_buy_order(pool, ctx, usd_amount_to_spend_str, limit_price_str, price_cents)
 
     elif cmd == "sellorder":
         if not arg or len(arg.split()) != 2:

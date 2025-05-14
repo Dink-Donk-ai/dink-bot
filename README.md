@@ -12,7 +12,7 @@ Dink-Bot is a Discord bot that allows users to simulate Bitcoin trading within a
 *   `!sell <amount_btc>`: Sell a specified amount of your virtual Bitcoin. Use `!sell all` to sell all your BTC.
 *   `!stats`: Displays current Bitcoin market statistics (price, 30-day SMA, 90-day range) and a leaderboard of the top users by net worth.
 *   `!history`: Shows your last 10 buy/sell transactions with amounts, prices, and timestamps.
-*   `!buyorder <btc_amount> <price_usd>`: Place a limit order to buy a specific amount of BTC (e.g., `0.1`) if the market price drops to or below your specified `price_usd` (e.g., `20000`). Your cash will be held until the order is filled or cancelled.
+*   `!buyorder <usd_amount> <price_usd>`: Place a limit order to spend a specific `usd_amount` (e.g., `100`) to buy BTC if the market price drops to or below your specified `price_usd` (e.g., `20000`). Your cash will be held until the order is filled or cancelled. The amount of BTC bought will depend on the market price at execution.
 *   `!sellorder <btc_amount> <price_usd>`: Place a limit order to sell a specific amount of BTC (e.g., `0.05`) if the market price rises to or above your specified `price_usd` (e.g., `22000`). Your BTC will be held until the order is filled or cancelled.
 *   `!cancelorder <order_id>`: Cancel an open limit order using its ID. Held funds/BTC will be released.
 *   `!myorders`: List all your currently open limit orders with their details.

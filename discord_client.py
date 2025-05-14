@@ -29,6 +29,10 @@ class DinkClient(discord.Client):
         self.sma90 = None
         self.volume24h = None
         self.market_cap = None
+
+        # For test price functionality
+        self.original_price_data = None 
+        self.is_test_price_active = False
         
         self.price_update_loop.start()
         
@@ -45,7 +49,8 @@ class DinkClient(discord.Client):
             print("Price data not available, skipping order processing and HODL alert.")
             return
 
-        await self.process_open_orders(self.price_cents)
+        if not self.is_test_price_active: # Only process if not in test mode (set_test_market_price does its own processing)
+            await self.process_open_orders(self.price_cents)
 
         if not all((self.series, self.price)):
             return
@@ -74,17 +79,57 @@ class DinkClient(discord.Client):
             
     async def update_price_data(self):
         """Fetch and update price data"""
+        if self.is_test_price_active:
+            print("Test price is active. Skipping real price update.")
+            return # Don't fetch real price if a test price is active
         try:
             fetched_data = await fetch_price_data()
             if fetched_data and fetched_data[1] is not None:
                 self.series, self.price, self.sma30, self.sma90, self.volume24h, self.market_cap = fetched_data
                 self.price_cents = int(self.price * 100)
+                print(f"Real price updated: ${self.price:,.2f}")
             else:
                 print("Failed to fetch or received None price from fetch_price_data")
                 self.price_cents = None
         except Exception as e:
             print(f"Error updating price data: {e}")
             self.price_cents = None
+            
+    async def set_test_market_price(self, test_price_float: float):
+        if not self.is_test_price_active: # Save original data only if not already in test mode
+            self.original_price_data = (self.series, self.price, self.price_cents, self.sma30, self.sma90, self.volume24h, self.market_cap)
+        
+        self.price = test_price_float
+        self.price_cents = int(test_price_float * 100)
+        # For simplicity, we are not altering series, sma30, sma90 etc. for test price.
+        # Commands that heavily rely on these (like full !stats digest) might show test price with old series data.
+        # This is acceptable for testing order execution.
+        self.is_test_price_active = True
+        print(f"TEST PRICE ACTIVATED: ${self.price:,.2f}. Processing orders now.")
+        await self.process_open_orders(self.price_cents) # Process orders with the new test price
+        return True
+
+    async def revert_to_real_price(self):
+        if self.is_test_price_active and self.original_price_data is not None:
+            (self.series, self.price, self.price_cents, self.sma30, 
+             self.sma90, self.volume24h, self.market_cap) = self.original_price_data
+            self.is_test_price_active = False
+            self.original_price_data = None
+            print(f"TEST PRICE REVERTED. Real price is now: ${self.price:,.2f} (or will update shortly). Processing orders.")
+            # Price update loop will fetch fresh data if it runs next, or we can force an update.
+            # Forcing an update to ensure fresh data immediately after revert.
+            await self.update_price_data() # Fetch fresh real data
+            if self.price_cents:
+                 await self.process_open_orders(self.price_cents) # Process orders with the reverted real price
+            return True
+        elif not self.is_test_price_active:
+            print("No test price was active to revert.")
+            return False
+        else: # is_test_price_active but no original_price_data (should not happen)
+            print("Error: Test price active but no original price data to revert to. Forcing real price fetch.")
+            self.is_test_price_active = False # Reset state
+            await self.update_price_data()
+            return False
             
     async def process_open_orders(self, current_market_price_cents: int):
         if current_market_price_cents is None or current_market_price_cents <= 0:
@@ -152,40 +197,58 @@ class DinkClient(discord.Client):
                         user_for_update = await conn.fetchrow("SELECT uid, name, cash_c, btc_c, cash_held_c, btc_held_c FROM users WHERE uid = $1 FOR UPDATE", order['uid'])
                         if not user_for_update: continue
 
-                        sats_to_buy = order['btc_amount_sats']
-                        cash_held_for_order = order['usd_value_cents']
+                        # For buy orders (spend USD model):
+                        # order['usd_value_cents'] is the amount of USD to spend.
+                        # order['btc_amount_sats'] was the *estimated* BTC at limit price.
+                        usd_to_spend = order['usd_value_cents']
 
-                        if user_for_update['cash_held_c'] < cash_held_for_order:
-                            print(f"Order {order['order_id']} inconsistency: Not enough held cash for user {order['uid']}. Skipping.")
+                        if user_for_update['cash_held_c'] < usd_to_spend:
+                            print(f"Order {order['order_id']} inconsistency: Not enough held cash ({user_for_update['cash_held_c']}) for user {order['uid']} to spend {usd_to_spend}. Skipping.")
+                            # This might indicate an issue if an order was placed without enough hold, or if cash_held_c was somehow altered.
+                            # We could cancel the order here to prevent it from being re-evaluated.
+                            # await conn.execute("UPDATE orders SET status = 'cancelled_error' WHERE order_id = $1", order['order_id'])
                             continue
 
-                        actual_cost_at_market = sats_to_buy * current_market_price_cents // SATOSHI
-                        refund_cents = cash_held_for_order - actual_cost_at_market
+                        sats_actually_bought = usd_to_spend * SATOSHI // current_market_price_cents
+                        if sats_actually_bought == 0:
+                            print(f"Buy order {order['order_id']} for user {order['uid']} resulted in 0 sats bought with {fmt_usd(usd_to_spend)} at market price {fmt_usd(current_market_price_cents)}. Cancelling order.")
+                            # Refund the held cash and cancel the order
+                            await conn.execute("UPDATE users SET cash_held_c = cash_held_c - $1, cash_c = cash_c + $1 WHERE uid = $2", 
+                                               usd_to_spend, order['uid'])
+                            await conn.execute("UPDATE orders SET status = 'cancelled_insufficient_value' WHERE order_id = $1", order['order_id'])
+                            # Notify user their order was cancelled due to market price yielding 0 BTC
+                            target_user_notify = self.get_user(order['uid']) or await self.fetch_user(order['uid'])
+                            if target_user_notify:
+                                cancel_embed = discord.Embed(title="⚠️ Buy Order Cancelled", description=f"Your buy order ID {order['order_id']} to spend {fmt_usd(usd_to_spend)} was cancelled. At the current market price of {fmt_usd(current_market_price_cents)}, this amount would buy 0 BTC.", color=discord.Color.red())
+                                try: await target_user_notify.send(embed=cancel_embed)
+                                except discord.Forbidden: pass # log if needed
+                            continue # Move to next order
+
+                        # No refund logic like before; we spend the exact `usd_to_spend`.
+                        new_btc_c = user_for_update['btc_c'] + sats_actually_bought
+                        new_cash_held_c = user_for_update['cash_held_c'] - usd_to_spend
+                        # user_for_update['cash_c'] is untouched here as the money was already moved from cash_c to cash_held_c
                         
-                        new_btc_c = user_for_update['btc_c'] + sats_to_buy
-                        new_cash_held_c = user_for_update['cash_held_c'] - cash_held_for_order
-                        new_cash_c = user_for_update['cash_c'] + refund_cents
-                        
-                        await conn.execute("UPDATE users SET btc_c = $1, cash_held_c = $2, cash_c = $3 WHERE uid = $4",
-                                           new_btc_c, new_cash_held_c, new_cash_c, order['uid'])
+                        await conn.execute("UPDATE users SET btc_c = $1, cash_held_c = $2 WHERE uid = $3",
+                                           new_btc_c, new_cash_held_c, order['uid'])
 
                         await conn.execute("UPDATE orders SET status = 'filled', sats_filled = $1 WHERE order_id = $2",
-                                           sats_to_buy, order['order_id'])
+                                           sats_actually_bought, order['order_id'])
                         
+                        # Transaction log: btc_amount is what was bought, usd_amount is what was spent.
                         await conn.execute("""
                             INSERT INTO transactions (uid, name, transaction_type, btc_amount_sats, usd_amount_cents, price_at_transaction_cents)
                             VALUES ($1, $2, 'buy', $3, $4, $5)
-                        """, order['uid'], user_for_update['name'], sats_to_buy, actual_cost_at_market, current_market_price_cents)
+                        """, order['uid'], user_for_update['name'], sats_actually_bought, usd_to_spend, current_market_price_cents)
 
                         target_user = self.get_user(order['uid']) or await self.fetch_user(order['uid'])
                         if target_user:
-                            embed = discord.Embed(title="✅ Buy Order Filled!", color=discord.Color.green())
+                            embed = discord.Embed(title="✅ Buy Order Filled (Spent USD)!", color=discord.Color.green())
                             embed.add_field(name="Order ID", value=str(order['order_id']), inline=False)
-                            embed.add_field(name="Bought", value=fmt_btc(sats_to_buy), inline=True)
-                            embed.add_field(name="Price", value=fmt_usd(current_market_price_cents), inline=True)
-                            embed.add_field(name="Cost", value=fmt_usd(actual_cost_at_market), inline=False)
-                            if refund_cents > 0:
-                                embed.add_field(name="Price Improvement Refund", value=fmt_usd(refund_cents), inline=False)
+                            embed.add_field(name="Spent", value=fmt_usd(usd_to_spend), inline=True)
+                            embed.add_field(name="Bought", value=fmt_btc(sats_actually_bought), inline=True)
+                            embed.add_field(name="Market Price", value=fmt_usd(current_market_price_cents), inline=False)
+                            embed.set_footer(text=f"Your limit price was {fmt_usd(order['limit_price_cents'])} or better.")
                             try:
                                 await target_user.send(embed=embed)
                             except discord.Forbidden:
@@ -262,7 +325,8 @@ class DinkClient(discord.Client):
                     self.series,
                     self.sma90,
                     self.volume24h,
-                    self.market_cap
+                    self.market_cap,
+                    self
                 )
                 
                 # Delete command message

@@ -11,18 +11,18 @@ INITIAL_CASH_CENTS = 100_000 # May not be needed here directly but good for refe
 # async def _process_order_placement():
 #     pass
 
-async def place_buy_order(pool: asyncpg.Pool, ctx, btc_amount_str: str, limit_price_str: str, current_market_price_cents: int):
-    """Handles !buyorder <amount_btc> <price_usd>"""
+async def place_buy_order(pool: asyncpg.Pool, ctx, usd_amount_to_spend_str: str, limit_price_str: str, current_market_price_cents: int):
+    """Handles !buyorder <usd_amount_to_spend> <price_usd>"""
     uid = ctx.author.id
     name = ctx.author.display_name
 
     try:
-        btc_amount_float = float(btc_amount_str)
-        if btc_amount_float <= 0:
-            raise ValueError("BTC amount must be positive.")
-        order_btc_sats = int(round(btc_amount_float * SATOSHI))
-        if order_btc_sats == 0:
-            await ctx.send(embed=discord.Embed(title="⚠️ Order Error", description="BTC amount is too small, rounds to 0 satoshis.", color=discord.Color.red()))
+        usd_to_spend_float = float(usd_amount_to_spend_str)
+        if usd_to_spend_float <= 0:
+            raise ValueError("USD amount to spend must be positive.")
+        order_usd_value_cents = int(round(usd_to_spend_float * 100))
+        if order_usd_value_cents == 0:
+            await ctx.send(embed=discord.Embed(title="⚠️ Order Error", description="USD amount is too small, rounds to 0 cents.", color=discord.Color.red()))
             return False
 
         limit_price_float = float(limit_price_str)
@@ -30,54 +30,55 @@ async def place_buy_order(pool: asyncpg.Pool, ctx, btc_amount_str: str, limit_pr
             raise ValueError("Limit price must be positive.")
         order_limit_price_cents = int(round(limit_price_float * 100))
         if order_limit_price_cents == 0:
-            await ctx.send(embed=discord.Embed(title="⚠️ Order Error", description="Limit price is too small, rounds to 0 cents.", color=discord.Color.red()))
+            await ctx.send(embed=discord.Embed(title="⚠️ Order Error", description="Limit price is too small, rounds to 0 cents. Cannot estimate BTC amount.", color=discord.Color.red()))
             return False
 
     except ValueError as e:
         await ctx.send(embed=discord.Embed(title="⚠️ Invalid Input", description=f"Please check your amounts and prices. {e}", color=discord.Color.red()))
         return False
 
-    order_usd_value_cents = order_btc_sats * order_limit_price_cents // SATOSHI
-    if order_usd_value_cents == 0:
-        await ctx.send(embed=discord.Embed(title="⚠️ Order Error", description="Total order value is too small (less than 1 cent).", color=discord.Color.red()))
+    # Estimate BTC to be bought at the limit price for informational purposes
+    # The actual BTC bought will depend on the market price at execution
+    estimated_btc_sats = order_usd_value_cents * SATOSHI // order_limit_price_cents
+    if estimated_btc_sats == 0:
+        await ctx.send(embed=discord.Embed(title="⚠️ Order Error", description="The amount you want to spend is too small to buy any BTC at your limit price.", color=discord.Color.red()))
         return False
 
     async with pool.acquire() as conn:
         async with conn.transaction():
             user = await conn.fetchrow("SELECT cash_c, btc_c, cash_held_c, btc_held_c FROM users WHERE uid = $1 FOR UPDATE", uid)
             if not user:
-                # This case should ideally be handled by user creation on first command, but as a fallback:
-                await conn.execute("INSERT INTO users(uid, name, cash_c, btc_c) VALUES($1, $2, $3, $4)", uid, name, 0, 0) # Start with 0 if new during order
+                await conn.execute("INSERT INTO users(uid, name, cash_c, btc_c) VALUES($1, $2, $3, $4)", uid, name, 0, 0) 
                 user_cash_c = 0
             else:
                 user_cash_c = user['cash_c']
 
             if user_cash_c < order_usd_value_cents:
                 embed = discord.Embed(title="❌ Insufficient Funds", color=discord.Color.red())
-                embed.add_field(name="Required", value=fmt_usd(order_usd_value_cents), inline=True)
-                embed.add_field(name="Available", value=fmt_usd(user_cash_c), inline=True)
+                embed.add_field(name="Required to Spend", value=fmt_usd(order_usd_value_cents), inline=True)
+                embed.add_field(name="Available Cash", value=fmt_usd(user_cash_c), inline=True)
                 await ctx.send(embed=embed)
-                return False # Transaction will be rolled back
+                return False 
 
-            # Hold funds
             new_cash_c = user_cash_c - order_usd_value_cents
             new_cash_held_c = (user['cash_held_c'] if user else 0) + order_usd_value_cents
             
             await conn.execute("UPDATE users SET cash_c = $1, cash_held_c = $2 WHERE uid = $3", 
                                new_cash_c, new_cash_held_c, uid)
 
-            # Create order
+            # btc_amount_sats now stores the *estimated* BTC at limit price
+            # usd_value_cents stores the actual USD to be spent
             await conn.execute("""
                 INSERT INTO orders (uid, name, order_type, btc_amount_sats, limit_price_cents, usd_value_cents, status)
                 VALUES ($1, $2, 'buy', $3, $4, $5, 'open')
-            """, uid, name, order_btc_sats, order_limit_price_cents, order_usd_value_cents)
+            """, uid, name, estimated_btc_sats, order_limit_price_cents, order_usd_value_cents)
     
-    embed = discord.Embed(title="✅ Buy Order Placed", color=discord.Color.green())
+    embed = discord.Embed(title="✅ Buy Order Placed (Spend USD)", color=discord.Color.green())
     embed.add_field(name="User", value=name, inline=False)
-    embed.add_field(name="Amount", value=fmt_btc(order_btc_sats), inline=True)
-    embed.add_field(name="Limit Price", value=fmt_usd(order_limit_price_cents), inline=True)
-    embed.add_field(name="Estimated Cost", value=fmt_usd(order_usd_value_cents), inline=False)
-    embed.set_footer(text=f"Order is now open. Current market price: {fmt_usd(current_market_price_cents)}")
+    embed.add_field(name="Spending", value=fmt_usd(order_usd_value_cents), inline=True)
+    embed.add_field(name="At Limit Price", value=fmt_usd(order_limit_price_cents), inline=True)
+    embed.add_field(name="Estimated BTC to Buy", value=f"~ {fmt_btc(estimated_btc_sats)}", inline=False)
+    embed.set_footer(text=f"Order is open. If filled, you will spend {fmt_usd(order_usd_value_cents)} to buy BTC at market price (≤ {fmt_usd(order_limit_price_cents)}). Current market: {fmt_usd(current_market_price_cents)}.")
     await ctx.send(embed=embed)
     return True
 

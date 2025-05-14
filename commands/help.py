@@ -43,8 +43,8 @@ async def run(pool: asyncpg.Pool, ctx, price: float, price_cents: int, sma: floa
         inline=False 
     )
     embed.add_field(
-        name="`!buyorder <btc_amount> <price_usd>`",
-        value="Place a limit order to buy a specific amount of BTC at a desired USD price per BTC (e.g., `!buyorder 0.1 20000`).",
+        name="`!buyorder <usd_amount> <price_usd>`",
+        value="Place a limit order to spend a specific USD amount (e.g., `100`) to buy BTC if the market price drops to or below your `price_usd` (e.g., `20000`).",
         inline=False
     )
     embed.add_field(

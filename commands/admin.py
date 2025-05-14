@@ -6,9 +6,10 @@ from utils import fmt_usd, fmt_btc
 INITIAL_CASH_CENTS = 100_000 # Starting cash for new users, in cents
 SATOSHI = 100_000_000
 
-async def run(pool: asyncpg.Pool, ctx, args: list[str] = None):
+async def run(pool: asyncpg.Pool, ctx, args: list[str] = None, client = None):
     """
     Handles admin commands. Expects args: [sub_command, target_user, ...values]
+    For setprice/revertprice, client instance is required.
     """
     if ctx.author.id not in settings.admin_user_ids:
         await ctx.send("⛔ You are not authorized to use admin commands.")
@@ -20,9 +21,40 @@ async def run(pool: asyncpg.Pool, ctx, args: list[str] = None):
 
     sub_command = args[0].lower()
 
-    # Commands that don't require a target user first
+    # Commands that require the client instance
+    if sub_command == "setprice":
+        if not client:
+            await ctx.send("⚠️ Client instance not available for `setprice`.")
+            return False
+        if len(args) < 2:
+            await ctx.send("Usage: `!admin setprice <new_price_usd>`")
+            return False
+        try:
+            new_price_usd_float = float(args[1])
+            if new_price_usd_float <= 0:
+                raise ValueError("Price must be positive.")
+            if await client.set_test_market_price(new_price_usd_float):
+                await ctx.send(f"✅ Test market price temporarily set to **{fmt_usd(int(new_price_usd_float*100))}**. Orders processed. Use `!admin revertprice` to go back to live data.")
+            else:
+                await ctx.send("⚠️ Failed to set test market price (see logs).")
+        except ValueError as e:
+            await ctx.send(f"⚠️ Invalid price for `setprice`: {e}")
+        return True 
+
+    elif sub_command == "revertprice":
+        if not client:
+            await ctx.send("⚠️ Client instance not available for `revertprice`.")
+            return False
+        if await client.revert_to_real_price():
+            current_real_price_str = fmt_usd(client.price_cents) if client.price_cents is not None else "N/A (fetching...)"
+            await ctx.send(f"✅ Market price reverted to live data (Currently: **{current_real_price_str}**). Orders processed.")
+        else:
+            await ctx.send("⚠️ Failed to revert to real price, or no test price was active (see logs).")
+        return True
+
+    # Existing commands that require target user
     if sub_command not in ["resetuser", "givecash", "givebtc"]:
-        await ctx.send(f"Unknown admin sub-command: `{sub_command}`. Available: `resetuser`, `givecash`, `givebtc`")
+        await ctx.send(f"Unknown admin sub-command: `{sub_command}`. Available: `resetuser`, `givecash`, `givebtc`, `setprice`, `revertprice`")
         return False
 
     if len(args) < 2:
@@ -57,7 +89,7 @@ async def run(pool: asyncpg.Pool, ctx, args: list[str] = None):
                  # If not in server and not in DB, it's an issue for commands that need to create user
                  pass # Handled by ON CONFLICT later
     except discord.HTTPException:
-        await ctx.send(f"⚠️ Could not fetch user details for ID {target_user_id} from Discord. Will proceed with ID.")
+        await ctx.send(f"⚠️ Could not fetch user details for ID {target_user_id} from Discord. Will proceed with ID if possible.")
         # Proceeding, name might remain "Unknown User" or be fetched from DB if exists
 
     if sub_command == "resetuser":
@@ -65,17 +97,22 @@ async def run(pool: asyncpg.Pool, ctx, args: list[str] = None):
             async with conn.transaction():
                 # Reset user's cash and btc
                 await conn.execute("""
-                    INSERT INTO users (uid, name, cash_c, btc_c)
-                    VALUES ($1, $2, $3, $4)
-                    ON CONFLICT (uid) DO UPDATE SET name = EXCLUDED.name, cash_c = EXCLUDED.cash_c, btc_c = EXCLUDED.btc_c
+                    INSERT INTO users (uid, name, cash_c, btc_c, join_timestamp)
+                    VALUES ($1, $2, $3, $4, now())
+                    ON CONFLICT (uid) DO UPDATE SET 
+                        name = EXCLUDED.name, 
+                        cash_c = EXCLUDED.cash_c, 
+                        btc_c = EXCLUDED.btc_c,
+                        join_timestamp = users.join_timestamp -- Keep original join_timestamp on conflict unless resetting it is desired
                 """, target_user_id, target_user_name, INITIAL_CASH_CENTS, 0)
                 
                 # Delete user's transaction history
-                await conn.execute("""
-                    DELETE FROM transactions WHERE uid = $1
-                """, target_user_id)
+                await conn.execute("DELETE FROM transactions WHERE uid = $1", target_user_id)
                 
-        await ctx.send(f"✅ User **{target_user_name}** (ID: {target_user_id}) has been reset to {fmt_usd(INITIAL_CASH_CENTS)}, 0 BTC, and their transaction history has been cleared.")
+                # Delete user's orders
+                await conn.execute("DELETE FROM orders WHERE uid = $1", target_user_id)
+                
+        await ctx.send(f"✅ User **{target_user_name}** (ID: {target_user_id}) has been reset to {fmt_usd(INITIAL_CASH_CENTS)}, 0 BTC, and their transaction history and orders have been cleared.")
         return True
 
     elif sub_command == "givecash":
