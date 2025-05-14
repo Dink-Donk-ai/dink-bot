@@ -13,6 +13,7 @@ from config import settings
 from commands import buy, sell, balance
 from utils import fmt_btc, fmt_usd, pct
 from discord_client import start_discord_client
+from update_schema import update_schema
 
 # Constants from original bot
 START_CASH = 100_000  # Moved from commands to here as a global constant
@@ -49,6 +50,11 @@ async def process_command(pool, ctx, cmd, arg, price, price_cents, sma30):
 async def main():
     """Main entry point"""
     try:
+        # Run schema update first to ensure database has all required columns
+        print("Running database schema update...")
+        await update_schema()
+        print("Schema update completed, initializing main database connection...")
+        
         # Initialize database connection using init_db from db.py
         pool = await init_db(settings.database_url)
         if not pool:
