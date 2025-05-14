@@ -53,29 +53,29 @@ async def process_command(pool, ctx, cmd, arg, price, price_cents, sma30, series
             if arg and ',' in arg and '.' not in arg: 
                 processed_arg = arg.replace(',', '.')
             amount_cents = int(float(processed_arg) * 100) if processed_arg else None
-            return await buy.run(pool, ctx, amount_cents, price, price_cents, sma30)
+            return await buy(pool, ctx, amount_cents, price, price_cents, sma30)
         except ValueError:
             await ctx.send(f"⚠️ Invalid amount for `!buy`. Please use a number like `100` or `100.50`.")
             return False
             
     elif cmd == "sell":
-        return await sell.run(pool, ctx, arg or "all", price, price_cents, sma30)
+        return await sell(pool, ctx, arg or "all", price, price_cents, sma30)
             
     elif cmd == "balance":
-        return await balance.run(pool, ctx, price, price_cents, sma30)
+        return await balance(pool, ctx, price, price_cents, sma30)
         
     elif cmd == "stats":
-        return await stats.run(pool, ctx, price, price_cents, sma30, series, sma90, volume24h, market_cap)
+        return await stats(pool, ctx, price, price_cents, sma30, series, sma90, volume24h, market_cap)
         
     elif cmd == "help":
-        return await help.run(pool, ctx, price, price_cents, sma30)
+        return await help(pool, ctx, price, price_cents, sma30)
     
     elif cmd == "history":
-        return await history.run(pool, ctx, price, price_cents, sma30)
+        return await history(pool, ctx, price, price_cents, sma30)
     
     elif cmd == "admin":
         admin_args = arg.split() if arg else []
-        return await admin.run(pool, ctx, admin_args)
+        return await admin(pool, ctx, admin_args)
 
     # New order commands
     elif cmd == "buyorder":
