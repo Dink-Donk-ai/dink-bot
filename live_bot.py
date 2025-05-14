@@ -57,10 +57,14 @@ async def process_command(pool, ctx, cmd, arg, price, price_cents, sma30):
     """Process a single command"""
     if cmd == "buy":
         try:
-            amount_cents = int(float(arg) * 100) if arg else None
+            processed_arg = arg
+            if arg and ',' in arg and '.' not in arg: # Basic check for comma as decimal separator
+                processed_arg = arg.replace(',', '.')
+            amount_cents = int(float(processed_arg) * 100) if processed_arg else None
             return await buy.run(pool, ctx, amount_cents, price, price_cents, sma30)
         except ValueError:
-            return False
+            await ctx.send(f"⚠️ Invalid amount for `!buy`. Please use a number like `100` or `100.50`.")
+            return False # Indicate failure
             
     elif cmd == "sell":
         return await sell.run(pool, ctx, arg or "all", price, price_cents, sma30)
