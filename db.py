@@ -56,6 +56,9 @@ async def init_db(dsn: str, max_retries: int = 5, retry_delay: int = 5) -> Optio
                         status TEXT NOT NULL DEFAULT 'open',                -- 'open', 'filled', 'cancelled', 'partially_filled'
                         timestamp TIMESTAMPTZ DEFAULT now()
                     );
+                    
+                    -- Add the join_timestamp column to users table if it doesn't exist
+                    ALTER TABLE users ADD COLUMN IF NOT EXISTS join_timestamp TIMESTAMPTZ DEFAULT now();
                 """)
             print("Successfully connected to database and ensured schema.")
             return pool
