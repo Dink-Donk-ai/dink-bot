@@ -135,6 +135,6 @@ async def run(pool: asyncpg.Pool, ctx, price: float, price_cents: int, sma: floa
     return False
 
 # commands/__init__.py
-from .buy import run as buy
-from .sell import run as sell
-from .balance import run as balance
+from commands.buy import run as buy
+from commands.sell import run as sell
+from commands.balance import run as balance
