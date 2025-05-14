@@ -28,22 +28,34 @@ async def fetch_price_data():
         async with session.get(COINGECKO_URL) as response:
             if response.status == 200:
                 data = await response.json()
+                if not data or "prices" not in data or not data["prices"]:
+                    print("Price data from Coingecko is empty or malformed.")
+                    return None, None, None, None, None, None
                 series = [p for _, p in data["prices"]]
-                price = series[-1]
-                sma30 = sum(series[-30:]) / 30
-                sma90 = sum(series) / len(series) if series else 0 # Calculate SMA90
-                volume24h = data["total_volumes"][-1][1] if data["total_volumes"] else 0 # Get last 24h volume
-                market_cap = data["market_caps"][-1][1] if data["market_caps"] else 0 # Get last market cap
+                price = series[-1] if series else None
+                if price is None:
+                    print("Could not determine current price from series.")
+                    return None, None, None, None, None, None
+                sma30 = sum(series[-30:]) / 30 if len(series) >= 30 else None
+                sma90 = sum(series) / len(series) if series else None 
+                volume24h = data["total_volumes"][-1][1] if data.get("total_volumes") and data["total_volumes"] else None
+                market_cap = data["market_caps"][-1][1] if data.get("market_caps") and data["market_caps"] else None
                 return series, price, sma30, sma90, volume24h, market_cap
+    print("Failed to fetch price data from Coingecko, HTTP error.")
     return None, None, None, None, None, None
 
 async def process_command(pool, ctx, cmd, arg, price, price_cents, sma30, series=None, sma90=None, volume24h=None, market_cap=None):
     """Process a single command"""
     if cmd == "buy":
         try:
-            amount_cents = int(float(arg) * 100) if arg else None
+            # Ensure arg is processed correctly for buy.run which expects amount_cents
+            processed_arg = arg
+            if arg and ',' in arg and '.' not in arg: 
+                processed_arg = arg.replace(',', '.')
+            amount_cents = int(float(processed_arg) * 100) if processed_arg else None
             return await buy.run(pool, ctx, amount_cents, price, price_cents, sma30)
         except ValueError:
+            await ctx.send(f"⚠️ Invalid amount for `!buy`. Please use a number like `100` or `100.50`.")
             return False
             
     elif cmd == "sell":
