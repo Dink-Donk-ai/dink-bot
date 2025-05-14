@@ -32,6 +32,8 @@ Dink-Bot is a Discord bot that allows users to simulate Bitcoin trading within a
 *   `!admin resetuser <user_mention_or_id>`: Resets a user's account to the initial cash balance ($1,000.00) and 0 BTC.
 *   `!admin givecash <user_mention_or_id> <usd_amount>`: Gives (or takes, if negative) a specified amount of USD to/from a user.
 *   `!admin givebtc <user_mention_or_id> <btc_amount>`: Gives (or takes, if negative) a specified amount of BTC to/from a user.
+*   `!admin setprice <new_price_usd>`: Temporarily sets a test market price for Bitcoin. This is useful for testing order execution without waiting for real price changes.
+*   `!admin revertprice`: Reverts back to the real market price data from CoinGecko after using the setprice command.
 
 ## Setup & Installation
 
@@ -77,16 +79,23 @@ Once the environment variables are set and dependencies are installed:
 python live_bot.py
 ```
 
+When the bot starts, it automatically:
+1. Updates the database schema if needed to ensure all required columns are present
+2. Initializes the database connection
+3. Connects to Discord and begins processing commands
+
 ## Database Schema
 
 The bot uses a PostgreSQL database with the following main tables:
 
-*   `users`: Stores user information (`uid`, `name`, `cash_c`, `btc_c`, `cash_held_c`, `btc_held_c`).
+*   `users`: Stores user information (`uid`, `name`, `cash_c`, `btc_c`, `cash_held_c`, `btc_held_c`, `join_timestamp`).
+    * `cash_held_c` and `btc_held_c` track funds that are reserved for open limit orders.
+    * `join_timestamp` records when the user first joined.
 *   `transactions`: Logs all buy/sell transactions (`transaction_id`, `uid`, `name`, `transaction_type`, `btc_amount_sats`, `usd_amount_cents`, `price_at_transaction_cents`, `timestamp`).
 *   `prices`: Intended for storing historical price data (currently fetched on-demand from CoinGecko but table exists for future use).
 *   `orders`: Stores user-placed limit orders (`order_id`, `uid`, `name`, `order_type`, `btc_amount_sats`, `sats_filled`, `limit_price_cents`, `usd_value_cents`, `status`, `timestamp`).
 
-The database tables are created automatically if they don't exist when the bot starts.
+The database tables are created automatically if they don't exist when the bot starts. New users start with $1,000.00 (100,000 cents) of virtual cash.
 
 ## Contributing
 

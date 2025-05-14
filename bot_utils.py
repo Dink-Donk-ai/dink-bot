@@ -46,8 +46,6 @@ async def fetch_price_data():
 
 async def process_command(pool, ctx, cmd, arg, price, price_cents, sma30, series, sma90, volume24h, market_cap, client):
     """Process a single command"""
-    print(f"[DEBUG bot_utils.py process_command] Received cmd: '{cmd}', arg: '{arg}' for user: {ctx.author.name}") # DEBUG LOG
-
     if cmd == "buy":
         try:
             # Ensure arg is processed correctly for buy.run which expects amount_cents
@@ -101,7 +99,6 @@ async def process_command(pool, ctx, cmd, arg, price, price_cents, sma30, series
         return await cancel_order(pool, ctx, arg)
 
     elif cmd == "myorders":
-        print(f"[DEBUG bot_utils.py] Entered 'myorders' processing branch for user: {ctx.author.name}") # DEBUG LOG
         return await list_my_orders(pool, ctx)
     
     return False 
