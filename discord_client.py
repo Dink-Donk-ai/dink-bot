@@ -12,10 +12,9 @@ from bot_utils import (
     process_command, 
     HODL_BUY_DIP_THRESHOLD,
     update_daily_price_stats,
-    get_current_90d_stats,
     initialize_daily_price_stats_if_empty
 )
-from utils import make_daily_digest, fmt_btc, fmt_usd
+from utils import make_daily_digest, fmt_btc, fmt_usd, get_current_90d_stats
 
 SATOSHI = 100_000_000
 

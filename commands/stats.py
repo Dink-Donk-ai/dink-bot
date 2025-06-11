@@ -1,8 +1,7 @@
 # commands/stats.py
 import asyncpg
 import discord
-from utils import fmt_btc, fmt_usd, pct, make_daily_digest, fmt_datetime_local
-from bot_utils import get_current_90d_stats
+from utils import fmt_btc, fmt_usd, pct, make_daily_digest, fmt_datetime_local, get_current_90d_stats
 SATOSHI = 100_000_000
 INITIAL_CASH_CENTS = 100_000
 

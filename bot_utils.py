@@ -102,23 +102,6 @@ async def update_daily_price_stats(pool, price: float, volume24h: float = None, 
             
             return high_90d, low_90d
 
-async def get_current_90d_stats(pool):
-    """Get current 90-day high and low from the database"""
-    from datetime import date
-    
-    async with pool.acquire() as conn:
-        stats = await conn.fetchrow("""
-            SELECT high_90d_cents, low_90d_cents 
-            FROM daily_price_stats 
-            WHERE date = $1
-        """, date.today())
-        
-        if stats:
-            return stats['high_90d_cents'] / 100.0, stats['low_90d_cents'] / 100.0
-        else:
-            # Fallback to None if no data exists yet
-            return None, None
-
 async def initialize_daily_price_stats_if_empty(pool, series, price, volume24h=None, market_cap=None):
     """Initialize daily price stats table with historical data if it's empty"""
     from datetime import date, timedelta

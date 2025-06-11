@@ -8,16 +8,31 @@ import discord
 SATOSHI = 100_000_000
 
 def fmt_usd(cents: int) -> str:
-    """Format integer cents as a USD string, e.g. 12345 → “$123.45”."""
+    """Format integer cents as a USD string, e.g. 12345 → "$123.45"."""
     return f"${cents / 100:,.2f}"
 
 def fmt_btc(sats: int) -> str:
-    """Format satoshis as BTC string, e.g. 1000000 → “0.01000000 BTC”."""
+    """Format satoshis as BTC string, e.g. 1000000 → "0.01000000 BTC"."""
     return f"{sats / SATOSHI:.8f} BTC"
 
 def pct(current: float, reference: float) -> float:
     """Compute percentage change of current vs reference."""
     return (current / reference - 1) * 100
+
+async def get_current_90d_stats(pool):
+    """Get current 90-day high and low from the database"""
+    async with pool.acquire() as conn:
+        stats = await conn.fetchrow("""
+            SELECT high_90d_cents, low_90d_cents 
+            FROM daily_price_stats 
+            WHERE date = $1
+        """, date.today())
+        
+        if stats:
+            return stats['high_90d_cents'] / 100.0, stats['low_90d_cents'] / 100.0
+        else:
+            # Fallback to None if no data exists yet
+            return None, None
 
 def make_daily_digest(series, today, sma30, sma90, volume24h, market_cap, hi90=None, lo90=None):
     """Generate daily market digest embed (HODLer focused)"""
