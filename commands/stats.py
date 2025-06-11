@@ -2,6 +2,7 @@
 import asyncpg
 import discord
 from utils import fmt_btc, fmt_usd, pct, make_daily_digest, fmt_datetime_local
+from bot_utils import get_current_90d_stats
 SATOSHI = 100_000_000
 INITIAL_CASH_CENTS = 100_000
 
@@ -9,6 +10,11 @@ async def run(pool: asyncpg.Pool, ctx, price: float, price_cents: int, sma30: fl
     """
     Shows Cash Kings leaderboard and market stats.
     """
+    # If price_cents is None, we can't calculate net worth properly
+    if price_cents is None:
+        await ctx.send("⚠️ Unable to display stats because price data is currently unavailable. Please try again later.")
+        return False
+        
     # Get top 5 users by cash, their P&L, trade count, and join date
     async with pool.acquire() as conn:
         users_data = await conn.fetch("""
@@ -35,10 +41,11 @@ async def run(pool: asyncpg.Pool, ctx, price: float, price_cents: int, sma30: fl
     embed_color = discord.Color.gold()
     if users_data:
         top_user_pnl = users_data[0]['pnl_c']
-        if top_user_pnl > 0:
-            embed_color = discord.Color.green()
-        elif top_user_pnl < 0:
-            embed_color = discord.Color.red()
+        if top_user_pnl is not None:  # Add null check here
+            if top_user_pnl > 0:
+                embed_color = discord.Color.green()
+            elif top_user_pnl < 0:
+                embed_color = discord.Color.red()
 
     leaderboard_embed = discord.Embed(
         title="🏆 Cash Kings Leaderboard 🏆",
@@ -50,24 +57,32 @@ async def run(pool: asyncpg.Pool, ctx, price: float, price_cents: int, sma30: fl
     else:
         for i, user in enumerate(users_data, 1):
             pnl_val = user['pnl_c']
-            pnl_sign = "+" if pnl_val >= 0 else ""
-            pnl_emoji = "📈" if pnl_val >= 0 else "📉"
+            if pnl_val is not None:  # Add null check here
+                pnl_sign = "+" if pnl_val >= 0 else ""
+                pnl_emoji = "📈" if pnl_val >= 0 else "📉"
+                pnl_display = f"{pnl_emoji} P&L: **{pnl_sign}{fmt_usd(pnl_val)}**\n"
+            else:
+                pnl_display = "P&L: N/A\n"
+                
             active_since_str = fmt_datetime_local(user['join_timestamp']) if user['join_timestamp'] else "N/A"
+            net_worth = user['net_worth_c'] if user['net_worth_c'] is not None else 0
             
             field_name = f"{i}. {user['name']}"
             field_value = (
                 f"💰 Cash: **{fmt_usd(user['cash_c'])}**\n"
-                f"{pnl_emoji} P&L: **{pnl_sign}{fmt_usd(pnl_val)}**\n"
+                f"{pnl_display}"
                 f"📊 Trades: {user['trade_count']}\n"
                 f"⏳ Active Since: {active_since_str}\n"
-                f"💼 Net Worth: {fmt_usd(user['net_worth_c'])}"
+                f"💼 Net Worth: {fmt_usd(net_worth)}"
             )
             leaderboard_embed.add_field(name=field_name, value=field_value, inline=False)
 
-    # Daily digest embed (existing logic)
+    # Daily digest embed with proper 90-day high/low tracking
     digest_embed = None
     if series and price is not None and sma30 is not None and sma90 is not None and volume24h is not None and market_cap is not None:
-        digest_embed = make_daily_digest(series, price, sma30, sma90, volume24h, market_cap)
+        # Get proper 90-day high/low from database
+        hi90, lo90 = await get_current_90d_stats(pool)
+        digest_embed = make_daily_digest(series, price, sma30, sma90, volume24h, market_cap, hi90, lo90)
 
     if digest_embed:
         await ctx.send(embed=digest_embed)

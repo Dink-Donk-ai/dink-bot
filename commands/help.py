@@ -6,9 +6,15 @@ async def run(pool: asyncpg.Pool, ctx, price: float, price_cents: int, sma: floa
     """
     Shows help message with available commands.
     """
+    # For help command, we don't need price data to function
+    # But we'll add a note if price data is unavailable
+    price_info = ""
+    if price_cents is None or price_cents <= 0:
+        price_info = "\n\n⚠️ Note: Price data is currently unavailable. Some commands may be limited."
+    
     embed = discord.Embed(
         title="📖 Dink-Bot Help",
-        description="Here are the available commands:",
+        description=f"Here are the available commands:{price_info}",
         color=discord.Color.blue() # Or any color you prefer for help
     )
 

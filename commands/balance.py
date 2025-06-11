@@ -11,6 +11,11 @@ async def run(pool: asyncpg.Pool, ctx, price: float, price_cents: int, sma: floa
     """
     uid = ctx.author.id
     name = ctx.author.display_name
+    
+    # Check for valid price data
+    if price_cents is None or price_cents <= 0:
+        await ctx.send("⚠️ Unable to display balance because price data is currently unavailable. Please try again later.")
+        return False
 
     async with pool.acquire() as conn:
         user = await conn.fetchrow("""

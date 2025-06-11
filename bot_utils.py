@@ -44,6 +44,135 @@ async def fetch_price_data():
     print("Failed to fetch price data from Coingecko, HTTP error.")
     return None, None, None, None, None, None
 
+async def update_daily_price_stats(pool, price: float, volume24h: float = None, market_cap: float = None):
+    """Update daily price statistics including proper 90-day high/low tracking"""
+    from datetime import date, timedelta
+    
+    today = date.today()
+    price_cents = int(price * 100)
+    volume24h_cents = int(volume24h * 100) if volume24h else None
+    market_cap_cents = int(market_cap * 100) if market_cap else None
+    
+    async with pool.acquire() as conn:
+        # Check if we already have an entry for today
+        existing_entry = await conn.fetchrow(
+            "SELECT * FROM daily_price_stats WHERE date = $1", today
+        )
+        
+        if existing_entry:
+            # Update today's entry with current price
+            current_high_90d = existing_entry['high_90d_cents']
+            current_low_90d = existing_entry['low_90d_cents']
+            
+            # Update high/low if current price is new extreme
+            new_high_90d = max(current_high_90d, price_cents)
+            new_low_90d = min(current_low_90d, price_cents)
+            
+            await conn.execute("""
+                UPDATE daily_price_stats 
+                SET price_cents = $1, high_90d_cents = $2, low_90d_cents = $3, 
+                    volume_24h_usd = $4, market_cap_usd = $5, updated_at = now()
+                WHERE date = $6
+            """, price_cents, new_high_90d, new_low_90d, volume24h_cents, market_cap_cents, today)
+            
+            return new_high_90d, new_low_90d
+        else:
+            # New day - calculate 90-day high/low from historical data
+            ninety_days_ago = today - timedelta(days=90)
+            
+            # Get all prices from the last 90 days (including today's price)
+            historical_data = await conn.fetch("""
+                SELECT price_cents FROM daily_price_stats 
+                WHERE date >= $1 AND date < $2
+                ORDER BY date DESC
+            """, ninety_days_ago, today)
+            
+            # Include today's price in the calculation
+            all_prices = [price_cents] + [row['price_cents'] for row in historical_data]
+            
+            high_90d = max(all_prices)
+            low_90d = min(all_prices)
+            
+            # Insert new entry
+            await conn.execute("""
+                INSERT INTO daily_price_stats 
+                (date, price_cents, high_90d_cents, low_90d_cents, volume_24h_usd, market_cap_usd)
+                VALUES ($1, $2, $3, $4, $5, $6)
+            """, today, price_cents, high_90d, low_90d, volume24h_cents, market_cap_cents)
+            
+            return high_90d, low_90d
+
+async def get_current_90d_stats(pool):
+    """Get current 90-day high and low from the database"""
+    from datetime import date
+    
+    async with pool.acquire() as conn:
+        stats = await conn.fetchrow("""
+            SELECT high_90d_cents, low_90d_cents 
+            FROM daily_price_stats 
+            WHERE date = $1
+        """, date.today())
+        
+        if stats:
+            return stats['high_90d_cents'] / 100.0, stats['low_90d_cents'] / 100.0
+        else:
+            # Fallback to None if no data exists yet
+            return None, None
+
+async def initialize_daily_price_stats_if_empty(pool, series, price, volume24h=None, market_cap=None):
+    """Initialize daily price stats table with historical data if it's empty"""
+    from datetime import date, timedelta
+    import aiohttp
+    
+    async with pool.acquire() as conn:
+        # Check if table is empty
+        count = await conn.fetchval("SELECT COUNT(*) FROM daily_price_stats")
+        if count > 0:
+            print("Daily price stats table already has data, skipping initialization.")
+            return
+        
+        print("Initializing daily price stats table with historical data...")
+        
+        # If we have series data from CoinGecko (90 days), use it to populate historical records
+        if series and len(series) > 0:
+            today = date.today()
+            
+            # Insert records for each day in the series, working backwards
+            for i, daily_price in enumerate(reversed(series)):
+                record_date = today - timedelta(days=len(series) - 1 - i)
+                price_cents = int(daily_price * 100)
+                
+                # Calculate rolling 90-day high/low up to this point
+                # This gives us the high/low for each historical day
+                relevant_prices = series[max(0, len(series) - 90 - i):len(series) - i] if i > 0 else series[:len(series)]
+                hi90_cents = int(max(relevant_prices) * 100)
+                lo90_cents = int(min(relevant_prices) * 100)
+                
+                volume_cents = int(volume24h * 100) if volume24h else None
+                market_cap_cents = int(market_cap * 100) if market_cap else None
+                
+                await conn.execute("""
+                    INSERT INTO daily_price_stats 
+                    (date, price_cents, high_90d_cents, low_90d_cents, volume_24h_usd, market_cap_usd)
+                    VALUES ($1, $2, $3, $4, $5, $6)
+                """, record_date, price_cents, hi90_cents, lo90_cents, volume_cents, market_cap_cents)
+            
+            print(f"Initialized daily price stats with {len(series)} historical records.")
+        else:
+            # Fallback: just insert today's data
+            today = date.today()
+            price_cents = int(price * 100)
+            volume_cents = int(volume24h * 100) if volume24h else None
+            market_cap_cents = int(market_cap * 100) if market_cap else None
+            
+            await conn.execute("""
+                INSERT INTO daily_price_stats 
+                (date, price_cents, high_90d_cents, low_90d_cents, volume_24h_usd, market_cap_usd)
+                VALUES ($1, $2, $2, $2, $3, $4)
+            """, today, price_cents, volume_cents, market_cap_cents)
+            
+            print("Initialized daily price stats with current price data only.")
+
 async def process_command(pool, ctx, cmd, arg, price, price_cents, sma30, series, sma90, volume24h, market_cap, client):
     """Process a single command"""
     if cmd == "buy":

@@ -11,6 +11,11 @@ async def run(pool: asyncpg.Pool, ctx, amount_cents: int, price: float, price_ce
     """
     uid = ctx.author.id
     name = ctx.author.display_name
+    
+    # Check for valid price data
+    if price_cents is None or price_cents <= 0:
+        await ctx.send("⚠️ Unable to process buy order because price data is currently unavailable. Please try again later.")
+        return False
 
     if amount_cents is None: # Handle case where !buy is called with no amount
         await ctx.send(f"Usage: `!buy <amount_usd>` or `!buy all`")

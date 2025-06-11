@@ -19,11 +19,14 @@ def pct(current: float, reference: float) -> float:
     """Compute percentage change of current vs reference."""
     return (current / reference - 1) * 100
 
-def make_daily_digest(series, today, sma30, sma90, volume24h, market_cap):
+def make_daily_digest(series, today, sma30, sma90, volume24h, market_cap, hi90=None, lo90=None):
     """Generate daily market digest embed (HODLer focused)"""
     yday, week = series[-2], series[-8]
     vol30 = statistics.pstdev(series[-30:])
-    lo90, hi90 = min(series), max(series)
+    
+    # Use provided 90-day high/low if available, otherwise fallback to series min/max
+    if hi90 is None or lo90 is None:
+        lo90, hi90 = min(series), max(series)
     
     gap_sma90 = pct(today, sma90)
     trend_sma90 = "📈" if gap_sma90 > 0 else "📉"

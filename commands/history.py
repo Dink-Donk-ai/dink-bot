@@ -11,6 +11,14 @@ async def run(pool: asyncpg.Pool, ctx, price: float, price_cents: int, sma: floa
     """
     uid = ctx.author.id
     name = ctx.author.display_name
+    
+    # While price data isn't directly used for calculations in this command,
+    # check it for consistency with other commands
+    if price_cents is None or price_cents <= 0:
+        # For history we can still show results even without current price
+        price_info = "⚠️ Note: Current price data is unavailable."
+    else:
+        price_info = f"Current BTC Price: ${price:,.0f}"
 
     async with pool.acquire() as conn:
         transactions = await conn.fetch("""
@@ -27,6 +35,8 @@ async def run(pool: asyncpg.Pool, ctx, price: float, price_cents: int, sma: floa
             description="You have no transaction history yet.",
             color=discord.Color.light_grey()
         )
+        if price_info.startswith("⚠️"):
+            embed.set_footer(text=price_info)
         await ctx.send(embed=embed)
         return True
 
@@ -46,5 +56,6 @@ async def run(pool: asyncpg.Pool, ctx, price: float, price_cents: int, sma: floa
         field_value = f"{btc_val} for {usd_val} (Price: {price_val})"
         embed.add_field(name=field_name, value=field_value, inline=False)
     
+    embed.set_footer(text=price_info)
     await ctx.send(embed=embed)
     return True 

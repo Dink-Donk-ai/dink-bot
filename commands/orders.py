@@ -15,6 +15,11 @@ async def place_buy_order(pool: asyncpg.Pool, ctx, usd_amount_to_spend_str: str,
     """Handles !buyorder <usd_amount_to_spend> <price_usd>"""
     uid = ctx.author.id
     name = ctx.author.display_name
+    
+    # Check for valid price data
+    if current_market_price_cents is None or current_market_price_cents <= 0:
+        await ctx.send(embed=discord.Embed(title="⚠️ Price Data Unavailable", description="Unable to place buy order because price data is currently unavailable. Please try again later.", color=discord.Color.red()))
+        return False
 
     try:
         usd_to_spend_float = float(usd_amount_to_spend_str)
@@ -87,6 +92,11 @@ async def place_sell_order(pool: asyncpg.Pool, ctx, btc_amount_str: str, limit_p
     uid = ctx.author.id
     name = ctx.author.display_name
 
+    # Check for valid price data
+    if current_market_price_cents is None or current_market_price_cents <= 0:
+        await ctx.send(embed=discord.Embed(title="⚠️ Price Data Unavailable", description="Unable to place sell order because price data is currently unavailable. Please try again later.", color=discord.Color.red()))
+        return False
+        
     try:
         btc_amount_float = float(btc_amount_str)
         if btc_amount_float <= 0:

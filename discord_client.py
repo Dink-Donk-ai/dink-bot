@@ -7,7 +7,14 @@ import asyncio
 from datetime import datetime, timezone
 
 from config import settings
-from bot_utils import fetch_price_data, HODL_BUY_DIP_THRESHOLD, process_command
+from bot_utils import (
+    fetch_price_data, 
+    process_command, 
+    HODL_BUY_DIP_THRESHOLD,
+    update_daily_price_stats,
+    get_current_90d_stats,
+    initialize_daily_price_stats_if_empty
+)
 from utils import make_daily_digest, fmt_btc, fmt_usd
 
 SATOSHI = 100_000_000
@@ -29,6 +36,8 @@ class DinkClient(discord.Client):
         self.sma90 = None
         self.volume24h = None
         self.market_cap = None
+        self.hi90 = None  # 90-day high from database
+        self.lo90 = None  # 90-day low from database
 
         # For test price functionality
         self.original_price_data = None 
@@ -39,6 +48,12 @@ class DinkClient(discord.Client):
     async def setup_hook(self):
         """Called when the client is being set up"""
         await self.update_price_data()
+        
+        # Initialize daily price stats table with historical data if it's empty
+        if self.series and self.price:
+            await initialize_daily_price_stats_if_empty(
+                self.pool, self.series, self.price, self.volume24h, self.market_cap
+            )
         
     @tasks.loop(minutes=5)
     async def price_update_loop(self):
@@ -59,17 +74,15 @@ class DinkClient(discord.Client):
             now_utc = datetime.now(timezone.utc)
             today_iso_date = now_utc.date().isoformat()
 
-            if self.last_hodl_alert_date != today_iso_date:
-                ninety_day_high = max(self.series) if self.series else 0
-                
-                if ninety_day_high > 0 and self.price < (ninety_day_high * (1 - HODL_BUY_DIP_THRESHOLD)):
+            if self.last_hodl_alert_date != today_iso_date and self.hi90:
+                if self.price < (self.hi90 * (1 - HODL_BUY_DIP_THRESHOLD)):
                     channel = self.get_channel(settings.channel_id)
                     if channel:
-                        percentage_drop = (1 - (self.price / ninety_day_high)) * 100
+                        percentage_drop = (1 - (self.price / self.hi90)) * 100
                         alert_message = (
                             f"📉 **HODL Alert!** 📉\n"
                             f"Bitcoin is trading at **${self.price:,.2f}**.\n"
-                            f"This is **{percentage_drop:.2f}%** below its 90-day high of ${ninety_day_high:,.2f}.\n"
+                            f"This is **{percentage_drop:.2f}%** below its 90-day high of ${self.hi90:,.2f}.\n"
                             f"Consider buying the dip!"
                         )
                         await channel.send(alert_message)
@@ -87,7 +100,16 @@ class DinkClient(discord.Client):
             if fetched_data and fetched_data[1] is not None:
                 self.series, self.price, self.sma30, self.sma90, self.volume24h, self.market_cap = fetched_data
                 self.price_cents = int(self.price * 100)
+                
+                # Update daily price statistics with proper 90-day tracking
+                await update_daily_price_stats(self.pool, self.price, self.volume24h, self.market_cap)
+                
+                # Get current 90-day high/low from database
+                self.hi90, self.lo90 = await get_current_90d_stats(self.pool)
+                
                 print(f"Real price updated: ${self.price:,.2f}")
+                if self.hi90 and self.lo90:
+                    print(f"90D High: ${self.hi90:,.2f}, 90D Low: ${self.lo90:,.2f}")
             else:
                 print("Failed to fetch or received None price from fetch_price_data")
                 self.price_cents = None
@@ -268,7 +290,9 @@ class DinkClient(discord.Client):
         if self.last_summary_date != today_iso and now_utc.hour == 8:  # 8 AM UTC
             channel = self.get_channel(settings.channel_id)
             if channel:
-                digest_embed = make_daily_digest(self.series, self.price, self.sma30, self.sma90, self.volume24h, self.market_cap)
+                # Get fresh 90-day high/low from database for digest
+                hi90, lo90 = await get_current_90d_stats(self.pool)
+                digest_embed = make_daily_digest(self.series, self.price, self.sma30, self.sma90, self.volume24h, self.market_cap, hi90, lo90)
                 await channel.send(embed=digest_embed)
                 self.last_summary_date = today_iso
     

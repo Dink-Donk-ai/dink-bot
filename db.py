@@ -57,6 +57,17 @@ async def init_db(dsn: str, max_retries: int = 5, retry_delay: int = 5) -> Optio
                         timestamp TIMESTAMPTZ DEFAULT now()
                     );
                     
+                    -- Table to track daily price statistics including 90-day highs and lows
+                    CREATE TABLE IF NOT EXISTS daily_price_stats (
+                        date DATE PRIMARY KEY,
+                        price_cents BIGINT NOT NULL,           -- Daily closing price in cents
+                        high_90d_cents BIGINT NOT NULL,        -- 90-day high in cents
+                        low_90d_cents BIGINT NOT NULL,         -- 90-day low in cents
+                        volume_24h_usd BIGINT,                 -- 24h volume in USD cents
+                        market_cap_usd BIGINT,                 -- Market cap in USD cents
+                        updated_at TIMESTAMPTZ DEFAULT now()
+                    );
+                    
                     -- Add the join_timestamp column to users table if it doesn't exist
                     ALTER TABLE users ADD COLUMN IF NOT EXISTS join_timestamp TIMESTAMPTZ DEFAULT now();
                 """)
