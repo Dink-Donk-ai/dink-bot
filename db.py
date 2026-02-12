@@ -70,6 +70,18 @@ async def init_db(dsn: str, max_retries: int = 5, retry_delay: int = 5) -> Optio
                     
                     -- Add the join_timestamp column to users table if it doesn't exist
                     ALTER TABLE users ADD COLUMN IF NOT EXISTS join_timestamp TIMESTAMPTZ DEFAULT now();
+
+                    -- Create birthdays table
+                    CREATE TABLE IF NOT EXISTS birthdays (
+                        id SERIAL PRIMARY KEY,
+                        uid BIGINT NOT NULL REFERENCES users(uid) ON DELETE CASCADE,
+                        name TEXT NOT NULL,
+                        day INTEGER NOT NULL,
+                        month INTEGER NOT NULL,
+                        year INTEGER,
+                        created_at TIMESTAMPTZ DEFAULT now(),
+                        UNIQUE(uid, name)
+                    );
                 """)
             print("Successfully connected to database and ensured schema.")
             return pool

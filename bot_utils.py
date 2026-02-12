@@ -11,6 +11,7 @@ from commands.orders import (
     cancel_order,
     list_my_orders
 )
+from commands.birthdays import handle_birthday_command
 
 # Constants
 START_CASH = 100_000
@@ -212,5 +213,8 @@ async def process_command(pool, ctx, cmd, arg, price, price_cents, sma30, series
 
     elif cmd == "myorders":
         return await list_my_orders(pool, ctx)
+
+    elif cmd == "birthday":
+        return await handle_birthday_command(pool, ctx, arg, client)
     
     return False 

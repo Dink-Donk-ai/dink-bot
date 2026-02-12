@@ -4,7 +4,7 @@ Discord client implementation
 import discord
 from discord.ext import tasks
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from config import settings
 from bot_utils import (
@@ -42,6 +42,7 @@ class DinkClient(discord.Client):
         self.original_price_data = None 
         self.is_test_price_active = False
         
+        self.last_birthday_check_date = None
         self.price_update_loop.start()
         
     async def setup_hook(self):
@@ -294,12 +295,65 @@ class DinkClient(discord.Client):
                 digest_embed = make_daily_digest(self.series, self.price, self.sma30, self.sma90, self.volume24h, self.market_cap, hi90, lo90)
                 await channel.send(embed=digest_embed)
                 self.last_summary_date = today_iso
-    
+
+    async def check_birthdays(self):
+        """Check for birthdays and send notifications"""
+        print("Checking for birthdays...")
+        now = datetime.now(timezone.utc)
+        today = now.date()
+        today_day, today_month = today.day, today.month
+        
+        # Calculate target date for 7 days in advance
+        target_date = today +  timedelta(days=7)
+        target_day, target_month = target_date.day, target_date.month
+
+        async with self.pool.acquire() as conn:
+            # Fetch birthdays matching today OR today+7 days
+            # We need to handle year logic if we were calculating age, but avoiding that for now.
+            # Just matching day/month.
+            birthdays = await conn.fetch("""
+                SELECT uid, name, day, month, year FROM birthdays
+                WHERE (day = $1 AND month = $2) OR (day = $3 AND month = $4)
+            """, today_day, today_month, target_day, target_month)
+            
+            for b in birthdays:
+                uid = b['uid']
+                name = b['name']
+                b_day, b_month = b['day'], b['month']
+                
+                is_today = (b_day == today_day and b_month == today_month)
+                
+                user = self.get_user(uid) or await self.fetch_user(uid)
+                if not user:
+                    print(f"Could not find user {uid} to notify about birthday for {name}")
+                    continue
+                    
+                try:
+                    if is_today:
+                        await user.send(f"🎂🎉 **It's {name}'s birthday today!** 🎈🥳")
+                    else:
+                        await user.send(f"📅 **Upcoming Birthday:** {name}'s birthday is in 7 days ({b_day}/{b_month})! 🎁")
+                except discord.Forbidden:
+                    print(f"Could not DM user {uid} about birthday for {name}")
+
+    @tasks.loop(hours=1)
+    async def birthday_check_loop(self):
+        """Daily birthday check loop"""
+        now_utc = datetime.now(timezone.utc)
+        today_iso = now_utc.date().isoformat()
+        
+        # Run at 9 AM UTC
+        if self.last_birthday_check_date != today_iso and now_utc.hour == 9:
+            await self.check_birthdays()
+            self.last_birthday_check_date = today_iso
+
     async def on_ready(self):
         """Called when the client is ready"""
         print(f'Logged in as {self.user}')
         if not self.digest_check_loop.is_running():
             self.digest_check_loop.start()
+        if not self.birthday_check_loop.is_running():
+            self.birthday_check_loop.start()
         
     async def on_message(self, message):
         """Handle incoming messages"""
@@ -321,7 +375,7 @@ class DinkClient(discord.Client):
         arg = parts[1] if len(parts) > 1 else None
         
         # Process command
-        if cmd in ('buy', 'sell', 'balance', 'stats', 'help', 'history', 'admin', 'myorders', 'buyorder', 'sellorder', 'cancelorder'):
+        if cmd in ('buy', 'sell', 'balance', 'stats', 'help', 'history', 'admin', 'myorders', 'buyorder', 'sellorder', 'cancelorder', 'birthday'):
             try:
                 # Create a context object similar to what commands expect
                 ctx = type('Context', (), {
