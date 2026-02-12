@@ -69,6 +69,14 @@ async def run(pool: asyncpg.Pool, ctx, price: float, price_cents: int, sma: floa
         inline=False
     )
     embed.add_field(
+        name="--- Birthday Commands ---",
+        value="`!birthday add <Name> <DD/MM>` - Add a friend's birthday\n"
+              "`!birthday remove <Name>` - Remove a birthday\n"
+              "`!birthday list` - Show your list\n"
+              "`!birthday testcheck` - Test notifications",
+        inline=False
+    )
+    embed.add_field(
         name="`!help`",
         value="Show this help message.",
         inline=False
