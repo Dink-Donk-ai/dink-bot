@@ -336,7 +336,7 @@ class DinkClient(discord.Client):
                 except discord.Forbidden:
                     print(f"Could not DM user {uid} about birthday for {name}")
 
-    @tasks.loop(hours=1)
+    @tasks.loop(minutes=5)
     async def birthday_check_loop(self):
         """Daily birthday check loop"""
         now_utc = datetime.now(timezone.utc)
@@ -344,6 +344,7 @@ class DinkClient(discord.Client):
         
         # Run at 9 AM UTC
         if self.last_birthday_check_date != today_iso and now_utc.hour == 9:
+            print(f"Triggering birthday check at {now_utc}")
             await self.check_birthdays()
             self.last_birthday_check_date = today_iso
 
