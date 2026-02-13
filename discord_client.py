@@ -316,6 +316,8 @@ class DinkClient(discord.Client):
                 WHERE (day = $1 AND month = $2) OR (day = $3 AND month = $4)
             """, today_day, today_month, target_day, target_month)
             
+            print(f"Found {len(birthdays)} birthdays matching criteria.")
+            
             for b in birthdays:
                 uid = b['uid']
                 name = b['name']
@@ -331,8 +333,10 @@ class DinkClient(discord.Client):
                 try:
                     if is_today:
                         await user.send(f"🎂🎉 **It's {name}'s birthday today!** 🎈🥳")
+                        print(f"Sent birthday DM to {user.name} for {name} (Today)")
                     else:
                         await user.send(f"📅 **Upcoming Birthday:** {name}'s birthday is in 7 days ({b_day}/{b_month})! 🎁")
+                        print(f"Sent upcoming birthday DM to {user.name} for {name} (+7 days)")
                 except discord.Forbidden:
                     print(f"Could not DM user {uid} about birthday for {name}")
 
@@ -347,6 +351,9 @@ class DinkClient(discord.Client):
             print(f"Triggering birthday check at {now_utc}")
             await self.check_birthdays()
             self.last_birthday_check_date = today_iso
+        else:
+            # Debug log to reassure user the loop is running
+            print(f"Birthday check loop running at {now_utc.strftime('%H:%M:%S')}. Skipped check. (Last: {self.last_birthday_check_date}, Today: {today_iso}, Hour: {now_utc.hour})")
 
     async def on_ready(self):
         """Called when the client is ready"""
