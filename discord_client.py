@@ -340,14 +340,43 @@ class DinkClient(discord.Client):
                 except discord.Forbidden:
                     print(f"Could not DM user {uid} about birthday for {name}")
 
+            # --- Global Birthday Check ---
+            global_birthdays = await conn.fetch("""
+                SELECT name, day, month, year FROM global_birthdays
+                WHERE (day = $1 AND month = $2) OR (day = $3 AND month = $4)
+            """, today_day, today_month, target_day, target_month)
+            
+            if global_birthdays:
+                print(f"Found {len(global_birthdays)} global birthdays.")
+                subscribers = await conn.fetch("SELECT uid FROM global_birthday_subs")
+                
+                for b in global_birthdays:
+                    name = b['name']
+                    b_day, b_month = b['day'], b['month']
+                    is_today = (b_day == today_day and b_month == today_month)
+                    
+                    for sub in subscribers:
+                        sub_uid = sub['uid']
+                        user = self.get_user(sub_uid) or await self.fetch_user(sub_uid)
+                        if not user: 
+                            continue
+                            
+                        try:
+                            if is_today:
+                                await user.send(f"🌍🎂 **Global Birthday Alert:** It's **{name}**'s birthday today! 🎈")
+                            else:
+                                await user.send(f"🌍📅 **Upcoming Global Birthday:** **{name}**'s birthday is in 7 days ({b_day}/{b_month})!")
+                        except discord.Forbidden:
+                           pass
+
     @tasks.loop(minutes=5)
     async def birthday_check_loop(self):
         """Daily birthday check loop"""
         now_utc = datetime.now(timezone.utc)
         today_iso = now_utc.date().isoformat()
         
-        # Run at 9 AM UTC
-        if self.last_birthday_check_date != today_iso and now_utc.hour == 9:
+        # Run at 8 AM UTC
+        if self.last_birthday_check_date != today_iso and now_utc.hour == 8:
             print(f"Triggering birthday check at {now_utc}")
             await self.check_birthdays()
             self.last_birthday_check_date = today_iso

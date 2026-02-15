@@ -70,10 +70,19 @@ async def run(pool: asyncpg.Pool, ctx, price: float, price_cents: int, sma: floa
     )
     embed.add_field(
         name="--- Birthday Commands ---",
-        value="`!birthday add <Name> <DD/MM>` - Add a friend's birthday\n"
-              "`!birthday remove <Name>` - Remove a birthday\n"
-              "`!birthday list` - Show your list\n"
-              "`!birthday testcheck` - Test notifications",
+        value=(
+            "**Personal List** (Only you see these)\n"
+            "`!birthday add <Name> <DD/MM>` - Add to your list\n"
+            "`!birthday remove <Name>` - Remove from your list\n"
+            "`!birthday list` - View your list\n\n"
+            "**Global Shared List** (Everyone sees these)\n"
+            "`!birthday global add <Name> <DD/MM>` - Add to shared list\n"
+            "`!birthday global remove <Name>` - Remove from shared list\n"
+            "`!birthday global list` - View shared list\n"
+            "`!birthday subscribe` - Get DMs for global birthdays\n"
+            "`!birthday unsubscribe` - Stop DMs for global birthdays\n\n"
+            "`!birthday testcheck` - Test notifications now"
+        ),
         inline=False
     )
     embed.add_field(

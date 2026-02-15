@@ -82,6 +82,23 @@ async def init_db(dsn: str, max_retries: int = 5, retry_delay: int = 5) -> Optio
                         created_at TIMESTAMPTZ DEFAULT now(),
                         UNIQUE(uid, name)
                     );
+
+                    -- Create global birthdays table
+                    CREATE TABLE IF NOT EXISTS global_birthdays (
+                        id SERIAL PRIMARY KEY,
+                        name TEXT NOT NULL UNIQUE,
+                        day INTEGER NOT NULL,
+                        month INTEGER NOT NULL,
+                        year INTEGER,
+                        added_by BIGINT,
+                        created_at TIMESTAMPTZ DEFAULT now()
+                    );
+
+                    -- Create global birthday subscribers table
+                    CREATE TABLE IF NOT EXISTS global_birthday_subs (
+                        uid BIGINT PRIMARY KEY,
+                        subscribed_at TIMESTAMPTZ DEFAULT now()
+                    );
                 """)
             print("Successfully connected to database and ensured schema.")
             return pool
